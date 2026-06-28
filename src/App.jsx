@@ -13,7 +13,10 @@ import {
   SuppliersView,
   NotificationPreferencesView,
   AuditLogsView,
-  AutomationPanel,
+  OrderHistoryView,
+  LoginView,
+  ForceChangePasswordView,
+  UserManagementView,
   Icons
 } from './components/Views';
 
@@ -25,10 +28,28 @@ export default function App() {
   const [suppliers, setSuppliers] = useState([]);
   const [logs, setLogs] = useState([]);
   const [branding, setBranding] = useState(CONFIG.branding);
-  const [activeRole, setActiveRole] = useState("Employee");
+  const [activeRole, setActiveRole] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem("pms_current_user");
+      return savedUser ? JSON.parse(savedUser).role : "Employee";
+    } catch {
+      return "Employee";
+    }
+  });
   const [notifications, setNotifications] = useState([]);
   const [webhookUrl, setWebhookUrl] = useState("");
   const [toasts, setToasts] = useState([]);
+  
+  // User Session state
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem("pms_current_user");
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [usersList, setUsersList] = useState([]);
   
   // Navigation Router state
   const [currentHash, setCurrentHash] = useState(window.location.hash || '#home');
@@ -61,6 +82,17 @@ export default function App() {
 
     const loadData = async () => {
       try {
+        await apiService.initializeDefaultUsers();
+        const uList = await apiService.getUsers();
+        setUsersList(uList);
+
+        const savedUser = localStorage.getItem("pms_current_user");
+        if (savedUser) {
+          const userObj = JSON.parse(savedUser);
+          setCurrentUser(userObj);
+          setActiveRole(userObj.role);
+        }
+
         const reqs = await apiService.getRequests();
         const sups = await apiService.getSuppliers();
         const auditLogs = await apiService.getLogs();
@@ -74,10 +106,6 @@ export default function App() {
         if (savedBranding) {
           setBranding(JSON.parse(savedBranding));
         }
-
-        // Active role
-        const role = localStorage.getItem("pms_active_role") || "Employee";
-        setActiveRole(role);
 
         // Webhook URL
         const whUrl = localStorage.getItem("pms_webhook_url") || "";
@@ -135,11 +163,11 @@ export default function App() {
   // EVENT TRAIL LOGGER & WEBHOOK TRIGGERS
   // ----------------------------------------------------
   const logEvent = async (action, previousValue = "None", updatedValue = "None", details = "") => {
-    const user = activeRole === "Admin" ? CONFIG.users.admin : CONFIG.users.employee;
+    const user = currentUser || { name: "System", role: "System" };
     const newLog = {
       timestamp: new Date().toISOString(),
       userName: user.name,
-      role: activeRole,
+      role: user.role,
       action,
       previousValue,
       updatedValue,
@@ -347,7 +375,9 @@ export default function App() {
         users: CONFIG.users,
         logEvent,
         triggerWebhook,
-        initWhatsAppThread
+        initWhatsAppThread,
+        currentUser,
+        setCurrentUser
       },
       navigateTo: (h) => { window.location.hash = h; },
       addNotification,
@@ -359,6 +389,25 @@ export default function App() {
       }
     };
 
+    // Authentication Guard
+    if (!currentUser) {
+      return <LoginView onLogin={(user) => {
+        setCurrentUser(user);
+        setActiveRole(user.role);
+        localStorage.setItem("pms_current_user", JSON.stringify(user));
+        window.location.hash = "#home";
+      }} />;
+    }
+
+    // Force Password Reset Guard
+    if (currentUser.mustChangePassword) {
+      return <ForceChangePasswordView user={currentUser} onPasswordChanged={(updatedUser) => {
+        setCurrentUser(updatedUser);
+        localStorage.setItem("pms_current_user", JSON.stringify(updatedUser));
+        window.location.hash = "#home";
+      }} />;
+    }
+
     switch (path) {
       case '#home':
       default:
@@ -366,6 +415,11 @@ export default function App() {
       case '#create-request':
         return <CreateRequestView {...navProps} />;
       case '#requested-orders':
+        // Guard: Sub Admin must have approve_requests permission
+        if (currentUser.role === 'Employee' || (currentUser.role === 'Sub Admin' && !currentUser.permissions?.approve_requests)) {
+          window.location.hash = '#home';
+          return null;
+        }
         return <RequestedOrdersView {...navProps} />;
       case '#po-preview':
         return <PoPreviewView {...navProps} requestId={params.id} />;
@@ -376,13 +430,30 @@ export default function App() {
       case '#settings':
         return <SettingsView {...navProps} />;
       case '#settings/suppliers':
+        // Guard: Sub Admin must have manage_suppliers permission
+        if (currentUser.role === 'Employee' || (currentUser.role === 'Sub Admin' && !currentUser.permissions?.manage_suppliers)) {
+          window.location.hash = '#settings';
+          return null;
+        }
         return <SuppliersView {...navProps} />;
       case '#settings/notifications':
         return <NotificationPreferencesView {...navProps} />;
       case '#settings/logs':
+        // Guard: Sub Admin must have view_logs permission
+        if (currentUser.role === 'Employee' || (currentUser.role === 'Sub Admin' && !currentUser.permissions?.view_logs)) {
+          window.location.hash = '#settings';
+          return null;
+        }
         return <AuditLogsView {...navProps} />;
-      case '#settings/automation':
-        return <AutomationPanel {...navProps} />;
+      case '#settings/users':
+        // Guard: Main Admin only
+        if (currentUser.role !== 'Main Admin') {
+          window.location.hash = '#settings';
+          return null;
+        }
+        return <UserManagementView {...navProps} />;
+      case '#order-history':
+        return <OrderHistoryView {...navProps} />;
     }
   };
 
@@ -409,12 +480,23 @@ export default function App() {
     });
   };
 
-  const handleRoleToggle = (role) => {
-    setActiveRole(role);
-    localStorage.setItem("pms_active_role", role);
-    showToast("Role Toggled", `Active role switched to: ${role === 'Admin' ? 'Johnson (Admin)' : 'John (Employee)'}`, "info");
-    // Force routing to home on role switch
-    window.location.hash = "#home";
+  const handleRoleToggle = async (username) => {
+    try {
+      const uList = await apiService.getUsers();
+      let targetUser = uList.find(u => u.username === username);
+      if (!targetUser) {
+        alert(`User ${username} not found.`);
+        return;
+      }
+      
+      setCurrentUser(targetUser);
+      setActiveRole(targetUser.role);
+      localStorage.setItem("pms_current_user", JSON.stringify(targetUser));
+      showToast("User Session Toggled", `Switched active login session to: ${targetUser.name} (${targetUser.role})`, "info");
+      window.location.hash = "#home";
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   return (
@@ -441,150 +523,58 @@ export default function App() {
           </main>
 
           {/* Sticky Bottom floating navigation tab bar */}
-          <div className="bottom-nav-container">
-            <nav className="bottom-nav">
-              {renderBottomNavTabs()}
-            </nav>
-          </div>
-        </div>
-      </div>
+          {currentUser && (
+            <div className="bottom-nav-container">
+              <nav className="bottom-nav">
+                {renderBottomNavTabs()}
+              </nav>
+            </div>
+          )}
 
-      {/* Floating Developer Tools FAB */}
-      <button className="floating-dev-toggle" onClick={() => setDevConsoleOpen(true)} title="Developer Tools">
-        ⚙️
-      </button>
-
-      {/* DEVELOPER SIMULATION CONSOLE BOTTOM DRAWER */}
-      <div className={`dev-console-overlay ${devConsoleOpen ? 'open' : ''}`} onClick={() => setDevConsoleOpen(false)}>
-        <div className="dev-console-sheet" onClick={e => e.stopPropagation()}>
-          <div className="dev-console-header">
-            <h3>⚙️ Developer Simulation Console</h3>
-            <button className="dev-console-close" onClick={() => setDevConsoleOpen(false)}>✕</button>
-          </div>
-
-          <div className="dev-console-content">
-            
-            {/* Active Testing Role */}
-            <div className="simulator-card">
-              <h3>👥 Active Testing Role</h3>
-              <div className="role-toggle-group">
-                <button className={`role-btn ${activeRole === 'Employee' ? 'active' : ''}`} onClick={() => handleRoleToggle('Employee')}>
-                  👷 John (Employee)
-                </button>
-                <button className={`role-btn ${activeRole === 'Admin' ? 'active' : ''}`} onClick={() => handleRoleToggle('Admin')}>
-                  👨‍💼 Johnson (Admin)
+          {/* MODAL SHEET OVERLAY */}
+          <div className={`modal-overlay ${modalOpen ? 'open' : ''}`} onClick={() => setModalOpen(false)}>
+            <div className="modal-sheet" onClick={e => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3 className="modal-title">{modalTitle}</h3>
+                <button className="modal-close" onClick={() => setModalOpen(false)}>
+                  <Icons.Close />
                 </button>
               </div>
-              <p style={{ fontSize: '11px', color: '#a89f95', marginTop: '8px', lineHeight: '1.3', textAlign: 'left' }}>
-                Toggling roles switches routes and permissions inside the app.
-              </p>
+              {modalContent}
             </div>
-
-            {/* WhatsApp Supplier Bot */}
-            <div className="simulator-card">
-              <h3>💬 WhatsApp Supplier Bot</h3>
-              <div className="chat-container">
-                <div className="chat-messages" style={{ textAlign: 'left' }}>
-                  {chatThread ? (
-                    chatThread.messages.map((msg, idx) => (
-                      <div key={idx} className={`chat-msg ${msg.sender}`}>
-                        {msg.sender === 'system' ? (
-                          msg.text
-                        ) : (
-                          <div dangerouslySetInnerHTML={{ __html: msg.text.replace(/\n/g, '<br>') }} />
-                        )}
-                      </div>
-                    ))
-                  ) : (
-                    <div className="chat-msg system">
-                      WhatsApp simulation idle. Select a supplier and generate a PO in the app to activate.
-                    </div>
-                  )}
-                </div>
-
-                <div className="chat-inputs">
-                  <div className="chat-quick-replies">
-                    {chatThread && chatThread.quickReplies.map(chip => (
-                      <button key={chip.text} className="reply-chip" onClick={() => handleSupplierChatReply(chip.text, chip.reply)}>
-                        {chip.text}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <p style={{ fontSize: '11px', color: '#a89f95', marginTop: '8px', lineHeight: '1.3', textAlign: 'left' }}>
-                Click a status chip to simulate a WhatsApp reply from the supplier.
-              </p>
-            </div>
-
-            {/* n8n Automation Webhooks */}
-            <div className="simulator-card">
-              <h3>⚙️ n8n Automation Webhooks</h3>
-              <div className="form-group" style={{ marginBottom: '8px' }}>
-                <label htmlFor="sim-webhook-url" style={{ fontSize: '11px', color: '#e5dec9' }}>Target Webhook Endpoint URL</label>
-                <input type="text" id="sim-webhook-url" className="form-control" style={{ backgroundColor: '#1a1918', borderColor: '#474341', color: '#fff', padding: '6px 10px', fontSize: '12px' }} value={webhookUrl} onChange={e => { setWebhookUrl(e.target.value); localStorage.setItem("pms_webhook_url", e.target.value); }} placeholder="https://primary-n8n.domain.com/webhook/..." />
-              </div>
-
-              <div className="webhook-row">
-                <span>Trigger: <b>New Request</b></span>
-                <button className="webhook-btn" onClick={() => handleManualWebhookTrigger("request.new")}>Fire Webhook</button>
-              </div>
-              <div className="webhook-row">
-                <span>Trigger: <b>Approved PO</b></span>
-                <button className="webhook-btn" onClick={() => handleManualWebhookTrigger("request.approved")}>Fire Webhook</button>
-              </div>
-              <div className="webhook-row">
-                <span>Trigger: <b>LR Received</b></span>
-                <button className="webhook-btn" onClick={() => handleManualWebhookTrigger("lr.uploaded")}>Fire Webhook</button>
-              </div>
-              <div className="webhook-row">
-                <span>Trigger: <b>Reached Warehouse</b></span>
-                <button className="webhook-btn" onClick={() => handleManualWebhookTrigger("warehouse.arrival")}>Fire Webhook</button>
-              </div>
-              <p style={{ fontSize: '11px', color: '#a89f95', marginTop: '8px', lineHeight: '1.3', textAlign: 'left' }}>
-                Sends simulated JSON payloads to your webhook URL.
-              </p>
-            </div>
-
-            {/* Audit Logs */}
-            <div className="simulator-card">
-              <h3>📜 Audit Trail Logs</h3>
-              <div className="log-list">
-                {logs.length === 0 ? (
-                  <div style={{ color: '#777', textAlign: 'center' }}>Logs empty</div>
-                ) : (
-                  logs.slice(0, 10).map((log, idx) => {
-                    const time = new Date(log.timestamp).toLocaleTimeString('en-US', { hour12: false });
-                    return (
-                      <div key={idx} className="log-item" style={{ textAlign: 'left' }}>
-                        <span className="log-time">[{time}]</span>&nbsp;
-                        <span className="log-user">{log.userName} ({log.role}):</span>&nbsp;
-                        <span className="log-action">{log.action}</span>
-                        <div style={{ color: '#8c8276', paddingLeft: '10px' }}>{log.details}</div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
           </div>
+
+          {/* Global Units Datalist */}
+          <datalist id="units-list">
+            <option value="pcs" />
+            <option value="units" />
+            <option value="kg" />
+            <option value="g" />
+            <option value="tons" />
+            <option value="bags" />
+            <option value="boxes" />
+            <option value="cartons" />
+            <option value="drums" />
+            <option value="barrels" />
+            <option value="meters" />
+            <option value="feet" />
+            <option value="inches" />
+            <option value="liters" />
+            <option value="gallons" />
+            <option value="coils" />
+            <option value="rolls" />
+            <option value="packets" />
+            <option value="bundles" />
+            <option value="sheets" />
+            <option value="cans" />
+            <option value="sets" />
+            <option value="pairs" />
+            <option value="bottles" />
+            <option value="tubes" />
+          </datalist>
+
         </div>
       </div>
-
-      {/* MODAL SHEET OVERLAY */}
-      <div className={`modal-overlay ${modalOpen ? 'open' : ''}`} onClick={() => setModalOpen(false)}>
-        <div className="modal-sheet" onClick={e => e.stopPropagation()}>
-          <div className="modal-header">
-            <h3 className="modal-title">{modalTitle}</h3>
-            <button className="modal-close" onClick={() => setModalOpen(false)}>
-              <Icons.Close />
-            </button>
-          </div>
-          {modalContent}
-        </div>
-      </div>
-
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { apiService } from '../services/api';
+import { apiService, hashPassword } from '../services/api';
 
 // ----------------------------------------------------
 // ICON CONSTANTS (Reusable clean SVG vectors)
@@ -15,7 +15,10 @@ export const Icons = {
   Close: () => <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
   Users: () => <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
   Bell: () => <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
-  Warning: () => <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>
+  Warning: () => <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>,
+  Eye: () => <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
+  EyeSlash: () => <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>,
+  WhatsApp: () => <svg viewBox="0 0 24 24" width="18" height="18" fill="#25D366" style={{ marginRight: '6px' }}><path d="M12.012 2c-5.506 0-9.969 4.463-9.969 9.969 0 1.758.459 3.407 1.264 4.849L2.05 21.95l5.289-1.386a9.92 9.92 0 0 0 4.673 1.173c5.507 0 9.97-4.463 9.97-9.97S17.519 2 12.012 2zm0 17.067c-1.482 0-2.929-.398-4.186-1.155l-.3-.178-3.116.817.831-3.039-.196-.312a8.125 8.125 0 0 1-1.246-4.231c0-4.49 3.653-8.143 8.143-8.143 4.49 0 8.143 3.653 8.143 8.143 0 4.49-3.653 8.143-8.143 8.143zm4.463-6.109c-.245-.122-1.45-.714-1.674-.796-.225-.082-.388-.122-.551.122-.164.245-.633.796-.776.959-.143.163-.286.184-.531.061-.245-.122-1.033-.381-1.968-1.216-.728-.65-1.22-1.452-1.363-1.696-.143-.245-.015-.377.108-.499.11-.11.245-.286.368-.429.122-.143.163-.245.245-.408.082-.163.041-.306-.02-.429-.061-.122-.551-1.327-.756-1.817-.199-.48-.4-.413-.551-.421-.143-.007-.306-.007-.47-.007a.903.903 0 0 0-.653.306c-.225.245-.857.837-.857 2.041 0 1.204.877 2.367.999 2.531.122.163 1.726 2.637 4.183 3.698.585.253 1.042.404 1.397.517.587.186 1.122.16 1.545.097.47-.072 1.45-.592 1.654-1.163.204-.571.204-1.061.143-1.163-.061-.102-.225-.163-.47-.286z"/></svg>
 };
 
 // Helper format date
@@ -26,29 +29,33 @@ const formatDate = (isoString) => {
 // ----------------------------------------------------
 // 1. HOME VIEW COMPONENT
 // ----------------------------------------------------
-export function HomeView({ state, navigateTo, openModal, setModalContent }) {
+export function HomeView({ state, navigateTo, openModal, closeModal, setModalContent }) {
   const [smartOpen, setSmartOpen] = useState(true);
-  const isEmployee = state.activeRole === "Employee";
-  const user = isEmployee ? state.users.employee : state.users.admin;
+  const user = state.currentUser;
+  const isEmployee = user.role === "Employee";
 
-  const pendingCount = state.requests.filter(r => r.status === "Pending").length;
-  const approvedCount = state.requests.filter(r => ["Approved", "Booked", "Acknowledged"].includes(r.status)).length;
-  const transitCount = state.requests.filter(r => ["In Transit", "LR Copy Received"].includes(r.status)).length;
-  const warehouseCount = state.requests.filter(r => r.status === "Reached Warehouse").length;
-  const rejectedCount = state.requests.filter(r => r.status === "Rejected").length;
+  const userRequests = isEmployee 
+    ? state.requests.filter(r => r.employeeName === user.name) 
+    : state.requests;
+
+  const liveOrderStatuses = ["Approved", "Booked", "Acknowledged", "In Transit", "LR Copy Received", "Reached Warehouse"];
+  const totalLiveCount = userRequests.filter(r => liveOrderStatuses.includes(r.status)).length;
+  const pendingCount = userRequests.filter(r => r.status === "Pending").length;
+  const delayedCount = userRequests.filter(r => ["Delayed", "No Response"].includes(r.status)).length;
+  const completedCount = userRequests.filter(r => r.status === "Delivered").length;
 
   const hr = new Date().getHours();
   const greetingMsg = hr < 12 ? "Good Morning" : hr < 17 ? "Good Afternoon" : "Good Evening";
 
   let welcomeAlert = "";
-  if (state.activeRole === "Admin") {
-    welcomeAlert = pendingCount > 0 
-      ? `You have ${pendingCount} pending approvals today.`
-      : "Operations are running smoothly.";
+  if (user.role === "Employee") {
+    welcomeAlert = totalLiveCount > 0
+      ? `You have ${totalLiveCount} active orders in progress.`
+      : "No active orders. Create a request to get started.";
   } else {
-    welcomeAlert = warehouseCount > 0
-      ? `${warehouseCount} deliveries reached the warehouse.`
-      : "No pending deliveries awaiting verification.";
+    welcomeAlert = pendingCount > 0
+      ? `You have ${pendingCount} pending approvals awaiting review.`
+      : "All procurement requests have been processed.";
   }
 
   const smartRequests = isEmployee 
@@ -60,7 +67,7 @@ export function HomeView({ state, navigateTo, openModal, setModalContent }) {
     .slice(0, 5);
 
   const openNotifications = () => {
-    const list = state.notifications.filter(n => n.role === "Both" || n.role === state.activeRole);
+    const list = state.notifications.filter(n => n.role === "Both" || n.role === user.role);
     setModalContent(
       <div>
         <div style={{ maxHeight: '350px', overflowY: 'auto', margin: '-10px -24px 0 -24px' }}>
@@ -78,7 +85,7 @@ export function HomeView({ state, navigateTo, openModal, setModalContent }) {
             ))
           )}
         </div>
-        <button className="btn-dark" style={{ marginTop: '16px', marginBottom: 0 }} onClick={() => {
+        <button className="btn-dark" style={{ marginTop: '16px', marginBottom: 0, cursor: 'pointer' }} onClick={() => {
           state.clearNotifications();
           closeModal();
         }}>
@@ -91,7 +98,7 @@ export function HomeView({ state, navigateTo, openModal, setModalContent }) {
     state.markNotificationsRead();
   };
 
-  const hasUnread = state.notifications.some(n => !n.read && (n.role === "Both" || n.role === state.activeRole));
+  const hasUnread = state.notifications.some(n => !n.read && (n.role === "Both" || n.role === user.role));
 
   return (
     <div>
@@ -99,53 +106,70 @@ export function HomeView({ state, navigateTo, openModal, setModalContent }) {
         <div className="header-left">
           <h1>{state.branding.logoText}</h1>
         </div>
-        <div className="header-right">
-          <button className="bell-btn" onClick={openNotifications}>
+        <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button className="bell-btn" onClick={openNotifications} style={{ cursor: 'pointer' }}>
             {hasUnread && <span className="bell-badge"></span>}
             <Icons.Bell />
           </button>
-          <button className="avatar-btn" onClick={() => navigateTo('#settings')}>
-            <img src={user.avatar} alt="Avatar" />
+          <button className="avatar-btn" onClick={() => navigateTo('#settings')} style={{ cursor: 'pointer', border: 'none', background: 'none', padding: 0 }}>
+            <UserAvatar user={user} size={40} />
           </button>
         </div>
       </header>
 
       <div className="greeting-container">
         <div className="greeting-text">{greetingMsg}, {user.name} 👋</div>
-        <div className="greeting-user">
-          {state.activeRole === "Admin" ? (
-            pendingCount > 0 ? (
-              <span>You have <span style={{ color: 'var(--primary-orange)', fontWeight: '700' }}>{pendingCount} pending approvals</span> today.</span>
-            ) : "Operations are running smoothly."
-          ) : (
-            warehouseCount > 0 ? (
-              <span><span style={{ color: 'var(--status-green)', fontWeight: '700' }}>{warehouseCount} deliveries</span> reached the warehouse.</span>
-            ) : "No pending deliveries awaiting verification."
-          )}
+        <div className="greeting-user">{welcomeAlert}</div>
+      </div>
+
+      {/* Dynamic Colored Dashboard Metric Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
+        <div className="stat-card blue-theme" onClick={() => navigateTo('#live-orders')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', margin: 0, gap: '8px', cursor: 'pointer', padding: '16px', background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: 'var(--border-radius-md)' }}>
+          <span style={{ fontSize: '20px' }}>🟦</span>
+          <div style={{ textAlign: 'left' }}>
+            <div style={{ fontSize: '24px', fontWeight: '800', lineHeight: '1', color: '#1e40af' }}>{totalLiveCount}</div>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#2563eb', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Live Orders</div>
+          </div>
+        </div>
+
+        <div className="stat-card orange-theme" onClick={() => {
+          if (user.role !== 'Employee') {
+            navigateTo('#requested-orders');
+          }
+        }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', margin: 0, gap: '8px', cursor: isEmployee ? 'default' : 'pointer', padding: '16px', background: '#fff7ed', border: '1.5px solid #ffedd5', borderRadius: 'var(--border-radius-md)' }}>
+          <span style={{ fontSize: '20px' }}>🟧</span>
+          <div style={{ textAlign: 'left' }}>
+            <div style={{ fontSize: '24px', fontWeight: '800', lineHeight: '1', color: '#c2410c' }}>{pendingCount}</div>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#ea580c', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              {isEmployee ? 'My Pending' : 'Pending Approval'}
+            </div>
+          </div>
+        </div>
+
+        <div className="stat-card red-theme" onClick={() => navigateTo('#live-orders')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', margin: 0, gap: '8px', cursor: 'pointer', padding: '16px', background: '#fef2f2', border: '1.5px solid #fee2e2', borderRadius: 'var(--border-radius-md)' }}>
+          <span style={{ fontSize: '20px' }}>🟥</span>
+          <div style={{ textAlign: 'left' }}>
+            <div style={{ fontSize: '24px', fontWeight: '800', lineHeight: '1', color: '#b91c1c' }}>{delayedCount}</div>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#ef4444', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Delayed Orders</div>
+          </div>
+        </div>
+
+        <div className="stat-card green-theme" onClick={() => navigateTo('#order-history')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', margin: 0, gap: '8px', cursor: 'pointer', padding: '16px', background: '#f0fdf4', border: '1.5px solid #dcfce7', borderRadius: 'var(--border-radius-md)' }}>
+          <span style={{ fontSize: '20px' }}>🟩</span>
+          <div style={{ textAlign: 'left' }}>
+            <div style={{ fontSize: '24px', fontWeight: '800', lineHeight: '1', color: '#15803d' }}>{completedCount}</div>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#16a34a', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Completed Orders</div>
+          </div>
         </div>
       </div>
 
-      <div className="stat-card" onClick={() => navigateTo('#live-orders')}>
-        <div className="stat-label">Requested<br />orders</div>
-        <div className="stat-value">{state.requests.length}</div>
-      </div>
-
-      <div className="stat-card" onClick={() => navigateTo('#live-orders')}>
-        <div className="stat-label">Live Orders</div>
-        <div className="stat-block">
-          <div className="stat-pill red" title="Pending / Rejected">{pendingCount + rejectedCount}</div>
-          <div className="stat-pill orange" title="Approved / Booked">{approvedCount}</div>
-          <div className="stat-pill blue" title="In Transit / Reached Warehouse">{transitCount + warehouseCount}</div>
-        </div>
-      </div>
-
-      <button className="btn-dark" onClick={() => navigateTo('#create-request')}>
+      <button className="btn-dark" onClick={() => navigateTo('#create-request')} style={{ cursor: 'pointer' }}>
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: '6px' }}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
         Create Request
       </button>
 
       <div className={`collapsible-section ${smartOpen ? 'open' : ''}`}>
-        <div className="collapsible-header" onClick={() => setSmartOpen(!smartOpen)}>
+        <div className="collapsible-header" onClick={() => setSmartOpen(!smartOpen)} style={{ cursor: 'pointer' }}>
           <span className="collapsible-title">SMART VIEW</span>
           <div className="collapsible-icon-wrapper">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9" /></svg>
@@ -172,7 +196,7 @@ export function HomeView({ state, navigateTo, openModal, setModalContent }) {
         </div>
       </div>
 
-      <div className="menu-card" onClick={() => navigateTo('#live-orders')}>
+      <div className="menu-card" onClick={() => navigateTo('#order-history')} style={{ cursor: 'pointer' }}>
         <span className="menu-card-title">Order history</span>
         <Icons.ChevronRight />
       </div>
@@ -191,6 +215,8 @@ export function CreateRequestView({ state, navigateTo, addNotification }) {
   const [billTo, setBillTo] = useState(state.branding.billingLocations[0] || "");
   const [description, setDescription] = useState("");
   const [listening, setListening] = useState(false);
+  const user = state.currentUser;
+  const isEmployee = user.role === "Employee";
 
   const handleSubmit = async () => {
     const quantity = parseFloat(qty);
@@ -200,7 +226,6 @@ export function CreateRequestView({ state, navigateTo, addNotification }) {
     }
 
     const reqId = `REQ-${1000 + state.requests.length + 1}`;
-    const user = state.activeRole === "Admin" ? state.users.admin : state.users.employee;
 
     const newReq = {
       id: reqId,
@@ -210,7 +235,7 @@ export function CreateRequestView({ state, navigateTo, addNotification }) {
       productName,
       qty: quantity,
       units,
-      suggestedSupplier,
+      suggestedSupplier: isEmployee ? "" : suggestedSupplier,
       billTo,
       description,
       status: "Pending",
@@ -222,7 +247,7 @@ export function CreateRequestView({ state, navigateTo, addNotification }) {
         {
           status: "Pending",
           updatedBy: user.name,
-          role: state.activeRole,
+          role: user.role,
           timestamp: new Date().toISOString()
         }
       ]
@@ -290,7 +315,7 @@ export function CreateRequestView({ state, navigateTo, addNotification }) {
     <div>
       <header className="app-header">
         <div className="header-left">
-          <button className="back-btn" onClick={() => navigateTo('#home')}>
+          <button className="back-btn" onClick={() => navigateTo('#home')} style={{ cursor: 'pointer' }}>
             <Icons.Back />
           </button>
           <h1 style={{ fontSize: '20px' }}>Create Request</h1>
@@ -311,20 +336,16 @@ export function CreateRequestView({ state, navigateTo, addNotification }) {
           <div className="form-group">
             <label>Units</label>
             <input type="text" className="form-control" placeholder="pcs" list="units-list" value={units} onChange={e => setUnits(e.target.value)} />
-            <datalist id="units-list">
-              <option value="pcs" />
-              <option value="units" />
-              <option value="kg" />
-              <option value="meters" />
-              <option value="drums" />
-            </datalist>
           </div>
         </div>
 
-        <div className="form-group">
-          <label>Suggest supplier</label>
-          <input type="text" className="form-control" placeholder="e.g. AB company" value={suggestedSupplier} onChange={e => setSuggestedSupplier(e.target.value)} />
-        </div>
+        {/* Suggest supplier is hidden completely for employees */}
+        {!isEmployee && (
+          <div className="form-group">
+            <label>Suggest supplier</label>
+            <input type="text" className="form-control" placeholder="e.g. AB company" value={suggestedSupplier} onChange={e => setSuggestedSupplier(e.target.value)} />
+          </div>
+        )}
 
         <div className="form-group">
           <label>Bill to</label>
@@ -337,13 +358,13 @@ export function CreateRequestView({ state, navigateTo, addNotification }) {
           <label>Description</label>
           <div className="textarea-container">
             <textarea className="form-control" rows="4" placeholder="Enter specifications..." value={description} onChange={e => setDescription(e.target.value)}></textarea>
-            <button className={`mic-btn ${listening ? 'listening' : ''}`} onClick={handleVoiceInput}>
+            <button className={`mic-btn ${listening ? 'listening' : ''}`} onClick={handleVoiceInput} style={{ cursor: 'pointer' }}>
               <Icons.Mic />
             </button>
           </div>
         </div>
 
-        <button className="btn-dark" onClick={handleSubmit} style={{ marginTop: '10px' }}>
+        <button className="btn-dark" onClick={handleSubmit} style={{ marginTop: '10px', cursor: 'pointer' }}>
           Place Request
         </button>
       </div>
@@ -354,7 +375,7 @@ export function CreateRequestView({ state, navigateTo, addNotification }) {
 // ----------------------------------------------------
 // 3. REQUESTED ORDERS VIEW (ADMIN APPROVALS)
 // ----------------------------------------------------
-export function RequestedOrdersView({ state, navigateTo, addNotification }) {
+export function RequestedOrdersView({ state, navigateTo, addNotification, openModal, closeModal, setModalContent }) {
   const pendingRequests = state.requests.filter(r => r.status === "Pending");
   
   // Custom local state for review card fields
@@ -397,10 +418,11 @@ export function RequestedOrdersView({ state, navigateTo, addNotification }) {
     }
 
     const req = state.requests.find(r => r.id === id);
+    const user = state.currentUser;
     const updatedHistory = [...req.history, {
       status: "Approved",
-      updatedBy: state.users.admin.name,
-      role: "Admin",
+      updatedBy: user.name,
+      role: user.role,
       timestamp: new Date().toISOString()
     }];
 
@@ -430,14 +452,15 @@ export function RequestedOrdersView({ state, navigateTo, addNotification }) {
   const handleReject = async (id) => {
     const reason = prompt("Rejection Reason:") || "Denied by management.";
     const req = state.requests.find(r => r.id === id);
+    const user = state.currentUser;
     
     const updatedReq = {
       ...req,
       status: "Rejected",
       history: [...req.history, {
         status: "Rejected",
-        updatedBy: state.users.admin.name,
-        role: "Admin",
+        updatedBy: user.name,
+        role: user.role,
         timestamp: new Date().toISOString(),
         remarks: reason
       }]
@@ -451,11 +474,34 @@ export function RequestedOrdersView({ state, navigateTo, addNotification }) {
     state.triggerWebhook("request.rejected", saved);
   };
 
+  const openSupplierPicker = (requestId) => {
+    const handleSelect = (supId) => {
+      updateCardField(requestId, "supplierId", supId);
+      closeModal();
+    };
+
+    setModalContent(
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '350px', overflowY: 'auto', margin: '-10px -24px 0 -24px', padding: '10px 24px' }}>
+        {state.suppliers.map(sup => (
+          <div key={sup.id} className="live-order-card" style={{ padding: '12px', cursor: 'pointer', margin: '4px 0', border: formData[requestId]?.supplierId === sup.id ? '2.5px solid var(--primary-orange)' : '1.5px solid var(--border-color)', borderRadius: '8px', textAlign: 'left' }} onClick={() => handleSelect(sup.id)}>
+            <div style={{ fontWeight: '700', fontSize: '14px', color: 'var(--text-main)' }}>{sup.companyName}</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Contact: {sup.contactPerson} | WA: {sup.whatsappNumber}</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', background: 'var(--bg-cream)', padding: '4px 8px', borderRadius: '4px' }}>
+              Products: {sup.products}
+            </div>
+          </div>
+        ))}
+      </div>,
+      "Select Supplier"
+    );
+    openModal();
+  };
+
   return (
     <div>
       <header className="app-header">
         <div className="header-left">
-          <button className="back-btn" onClick={() => navigateTo('#home')}>
+          <button className="back-btn" onClick={() => navigateTo('#home')} style={{ cursor: 'pointer' }}>
             <Icons.Back />
           </button>
           <h1 style={{ fontSize: '20px' }}>Requested orders</h1>
@@ -492,7 +538,7 @@ export function RequestedOrdersView({ state, navigateTo, addNotification }) {
                   </div>
                   <div className="form-group">
                     <label>Units</label>
-                    <input type="text" className="form-control" value={current.units} onChange={e => updateCardField(req.id, "units", e.target.value)} />
+                    <input type="text" className="form-control" list="units-list" value={current.units} onChange={e => updateCardField(req.id, "units", e.target.value)} />
                   </div>
                 </div>
 
@@ -508,19 +554,20 @@ export function RequestedOrdersView({ state, navigateTo, addNotification }) {
                   </select>
                 </div>
 
+                {/* Mobile-friendly Supplier selection button instead of dropdown */}
                 <div className="form-group">
                   <label>Select supplier</label>
-                  <select className="form-control" value={current.supplierId} onChange={e => updateCardField(req.id, "supplierId", e.target.value)}>
-                    <option value="">-- Choose Supplier --</option>
-                    {state.suppliers.map(sup => (
-                      <option key={sup.id} value={sup.id}>{sup.companyName} ({sup.contactPerson})</option>
-                    ))}
-                  </select>
+                  <button type="button" className="form-control" style={{ textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: 'var(--card-bg)' }} onClick={() => openSupplierPicker(req.id)}>
+                    <span style={{ color: current.supplierId ? 'var(--text-main)' : 'var(--text-muted)' }}>
+                      {current.supplierId ? state.suppliers.find(s => s.id === current.supplierId)?.companyName : "-- Choose Supplier --"}
+                    </span>
+                    <Icons.ChevronRight />
+                  </button>
                 </div>
 
                 <div className="card-actions-row">
-                  <button className="btn-dark" style={{ backgroundColor: 'var(--status-red)', marginBottom: 0, padding: '10px' }} onClick={() => handleReject(req.id)}>Reject</button>
-                  <button className="btn-orange" style={{ flex: 1.5, padding: '10px' }} onClick={() => handleApprove(req.id)}>Generate PO</button>
+                  <button className="btn-dark" style={{ backgroundColor: 'var(--status-red)', marginBottom: 0, padding: '10px', cursor: 'pointer' }} onClick={() => handleReject(req.id)}>Reject</button>
+                  <button className="btn-orange" style={{ flex: 1.5, padding: '10px', cursor: 'pointer' }} onClick={() => handleApprove(req.id)}>Generate PO</button>
                 </div>
               </div>
             );
@@ -712,19 +759,16 @@ Delivery Location: *${req.billTo}*
 // 5. LIVE ORDERS VIEW COMPONENT
 // ----------------------------------------------------
 export function LiveOrdersView({ state, navigateTo }) {
-  const isEmployee = state.activeRole === "Employee";
-  const user = isEmployee ? state.users.employee : state.users.admin;
+  const user = state.currentUser;
+  const isEmployee = user.role === "Employee";
 
+  const liveOrderStatuses = ["Approved", "Booked", "Acknowledged", "Picked", "In Transit", "LR Copy Received", "Reached Warehouse"];
+  
   const filteredRequests = isEmployee 
-    ? state.requests.filter(r => r.employeeName === user.name) 
-    : state.requests;
+    ? state.requests.filter(r => r.employeeName === user.name && liveOrderStatuses.includes(r.status)) 
+    : state.requests.filter(r => liveOrderStatuses.includes(r.status));
 
   const sorted = [...filteredRequests].sort((a, b) => {
-    const activeOrder = ["Approved", "Booked", "Acknowledged", "In Transit", "LR Copy Received", "Reached Warehouse"];
-    const aActive = activeOrder.includes(a.status);
-    const bActive = activeOrder.includes(b.status);
-    if (aActive && !bActive) return -1;
-    if (!aActive && bActive) return 1;
     return new Date(b.date) - new Date(a.date);
   });
 
@@ -732,23 +776,28 @@ export function LiveOrdersView({ state, navigateTo }) {
     <div>
       <header className="app-header">
         <div className="header-left">
-          <button className="back-btn" onClick={() => navigateTo('#home')}>
+          <button className="back-btn" onClick={() => navigateTo('#home')} style={{ cursor: 'pointer' }}>
             <Icons.Back />
           </button>
           <h1 style={{ fontSize: '20px' }}>Live orders</h1>
+        </div>
+        <div className="header-right">
+          <div style={{ background: '#e5dec9', fontSize: '12px', fontWeight: '800', padding: '4px 8px', borderRadius: '4px', color: 'var(--text-main)' }}>
+            {filteredRequests.length}
+          </div>
         </div>
       </header>
 
       <div style={{ paddingTop: '10px' }}>
         {sorted.length === 0 ? (
           <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            No orders found.
+            No active live orders found.
           </div>
         ) : (
           sorted.map(req => {
             const supplier = state.suppliers.find(s => s.id === req.supplierId) || { companyName: "Not Assigned" };
             return (
-              <div key={req.id} className="live-order-card" onClick={() => navigateTo(`#order-details?id=${req.id}`)}>
+              <div key={req.id} className="live-order-card" onClick={() => navigateTo(`#order-details?id=${req.id}`)} style={{ cursor: 'pointer' }}>
                 <div className="card-header-row">
                   <h3>{supplier.companyName}</h3>
                   <span className="badge-view-details">View Details</span>
@@ -795,122 +844,116 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
     if (!newStatus) return;
     const prevStatus = req.status;
 
+    const updatedHistory = [...req.history, {
+      status: newStatus,
+      updatedBy: state.currentUser.name,
+      role: state.currentUser.role,
+      timestamp: new Date().toISOString(),
+      remarks: remarks || `Status changed from ${prevStatus} to ${newStatus}.`
+    }];
+
     const updatedReq = {
       ...req,
       status: newStatus,
-      history: [...req.history, {
-        status: newStatus,
-        updatedBy: state.activeRole === "Admin" ? state.users.admin.name : state.users.employee.name,
-        role: state.activeRole,
-        timestamp: new Date().toISOString(),
-        remarks: remarks || `Status changed from ${prevStatus} to ${newStatus}.`
-      }]
+      history: updatedHistory
     };
 
     const saved = await apiService.updateRequest(requestId, updatedReq);
     state.setRequests(state.requests.map(r => r.id === requestId ? saved : r));
 
-    state.logEvent("Status Changed", prevStatus, newStatus, `Order ${requestId} status updated: ${remarks}`);
+    state.logEvent("Status Changed Manually", prevStatus, newStatus, `Manual status override to: ${newStatus}`);
+    addNotification("Status Updated", `Order ${requestId} status is now ${newStatus}.`, "Both");
 
-    if (newStatus === "Reached Warehouse") {
-      addNotification(
-        "Warehouse Arrival",
-        `Material for ${requestId} (${req.productName}) has reached the warehouse and is awaiting verification.`,
-        "Employee"
-      );
-      state.triggerWebhook("warehouse.arrival", saved);
-    } else {
-      addNotification("Order Updated", `Order ${requestId} status changed to ${newStatus}`, "Both");
-    }
+    let eventKey = "request.updated";
+    if (newStatus === "In Transit") eventKey = "request.transit";
+    else if (newStatus === "Reached Warehouse") eventKey = "warehouse.arrival";
+    else if (newStatus === "Delivered") eventKey = "request.delivered";
 
-    state.triggerWebhook("status.changed", saved);
+    state.triggerWebhook(eventKey, saved);
   };
 
-  const handleLrUpload = (e) => {
+  const handleLrUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = async (event) => {
-      const dataUrl = event.target.result;
-      const prevStatus = req.status;
+    reader.onloadend = async () => {
+      const base64data = reader.result;
+      const updatedHistory = [...req.history, {
+        status: "LR Copy Received",
+        updatedBy: state.currentUser.name,
+        role: state.currentUser.role,
+        timestamp: new Date().toISOString(),
+        remarks: "Uploaded LR consignment copy."
+      }];
 
       const updatedReq = {
         ...req,
-        lrCopy: dataUrl,
         status: "LR Copy Received",
-        history: [...req.history, {
-          status: "LR Copy Received",
-          updatedBy: state.activeRole === "Admin" ? state.users.admin.name : state.users.employee.name,
-          role: state.activeRole,
-          timestamp: new Date().toISOString(),
-          remarks: `Uploaded LR document copy: ${file.name}`
-        }]
+        lrCopy: base64data,
+        history: updatedHistory
       };
 
       const saved = await apiService.updateRequest(requestId, updatedReq);
       state.setRequests(state.requests.map(r => r.id === requestId ? saved : r));
 
-      state.logEvent("LR Uploaded", prevStatus, "LR Copy Received", `Attached LR copy ${file.name} to ${requestId}`);
-      addNotification("LR Received", `LR Copy document uploaded for ${requestId}.`, "Both");
+      state.logEvent("Uploaded LR Consignment", req.status, "LR Copy Received", `Uploaded copy for ${requestId}`);
+      addNotification("LR Copy Received", `LR Copy has been uploaded for ${requestId}.`, "Both");
       state.triggerWebhook("lr.uploaded", saved);
     };
     reader.readAsDataURL(file);
   };
 
-  const handleVerifyDeliver = () => {
-    const remarks = prompt("Enter verification remarks:") || "Physically verified and counted. Fits specification.";
-    handleStatusChange("Delivered", remarks);
-  };
-
   const handleViewLr = () => {
+    if (!req.lrCopy) return;
     setModalContent(
-      <div style={{ textAlign: 'center', padding: '10px 0' }}>
-        <img src={req.lrCopy} style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '8px', border: '1px solid #ccc' }} alt="LR copy attachment" />
-        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '12px' }}>Order ID: {req.id}</div>
+      <div style={{ textAlign: 'center' }}>
+        {req.lrCopy.startsWith("data:image") ? (
+          <img src={req.lrCopy} style={{ maxWidth: '100%', borderRadius: '8px', border: '1px solid var(--border-color)' }} alt="LR Copy" />
+        ) : (
+          <iframe src={req.lrCopy} style={{ width: '100%', height: '350px', border: 'none' }} title="LR Document"></iframe>
+        )}
       </div>,
-      "LR Copy Document"
+      "LR Consignment Preview"
     );
     openModal();
   };
+
+  const handleVerifyDeliver = () => {
+    const remarks = prompt("Enter delivery verification remarks:") || "Physically verified and counted.";
+    handleStatusChange("Delivered", remarks);
+  };
+
+  const hasEditPermission = state.currentUser.role === 'Main Admin' || (state.currentUser.role === 'Sub Admin' && state.currentUser.permissions?.edit_orders);
 
   return (
     <div>
       <header className="app-header">
         <div className="header-left">
-          <button className="back-btn" onClick={() => navigateTo('#live-orders')}>
+          <button className="back-btn" onClick={() => navigateTo('#live-orders')} style={{ cursor: 'pointer' }}>
             <Icons.Back />
           </button>
-          <h1 style={{ fontSize: '20px' }}>Order Details</h1>
+          <h1 style={{ fontSize: '18px' }}>Order details</h1>
         </div>
       </header>
 
-      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px', textAlign: 'left' }}>
-        {dateStr} &nbsp;&bull;&nbsp; {timeStr}
-      </div>
-
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-          <h2 style={{ fontSize: '22px', fontWeight: '800', color: 'var(--text-main)', textAlign: 'left' }}>{req.productName}</h2>
-          <div style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-muted)' }}>{req.qty} {req.units}</div>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <div style={{ fontWeight: '700', color: 'var(--primary-orange)' }}>{supplier.companyName}</div>
+      <div style={{ paddingTop: '10px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: '800', textAlign: 'left' }}>{supplier.companyName}</h3>
           <span className={`status-badge ${req.status.toLowerCase().replace(/ /g, '')}`}>{req.status}</span>
         </div>
 
         {req.poNumber && <div style={{ fontSize: '12px', marginBottom: '14px', textAlign: 'left' }}><b>PO Ref:</b> {req.poNumber} ({formatDate(req.poDate)})</div>}
 
         {req.lrCopy ? (
-          <div className="lr-upload-box" style={{ borderStyle: 'solid', backgroundColor: '#f0fdf4', borderColor: 'var(--status-green)' }}>
+          <div className="lr-upload-box" style={{ borderStyle: 'solid', backgroundColor: '#f0fdf4', borderColor: 'var(--status-green)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={handleViewLr}>
             <div className="lr-text-primary" style={{ color: 'var(--status-green)' }}>LR Copy Attached</div>
-            <span className="badge-view-lr" onClick={handleViewLr} style={{ backgroundColor: 'var(--status-green)' }}>View LR</span>
+            <span className="badge-view-lr" style={{ backgroundColor: 'var(--status-green)' }}>View LR</span>
           </div>
         ) : (
-          <div className="lr-upload-box">
+          <div className="lr-upload-box" style={{ cursor: 'pointer' }}>
             <div className="lr-text-primary">Upload LR Copy</div>
-            <input type="file" accept="image/*,application/pdf" onChange={handleLrUpload} />
+            <input type="file" accept="image/*,application/pdf" onChange={handleLrUpload} style={{ cursor: 'pointer' }} />
             <span className="badge-view-lr">Select File</span>
           </div>
         )}
@@ -943,37 +986,174 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
         </div>
 
         {req.status === "Reached Warehouse" && (
-          <button className="btn-dark" onClick={handleVerifyDeliver} style={{ backgroundColor: 'var(--status-green)', marginTop: '16px' }}>
+          <button className="btn-dark" onClick={handleVerifyDeliver} style={{ backgroundColor: 'var(--status-green)', marginTop: '16px', cursor: 'pointer' }}>
             Verify & Mark Delivered
           </button>
         )}
 
-        <div className="form-group" style={{ marginTop: '16px' }}>
-          <label>Change status</label>
-          <select className="form-control" onChange={e => handleStatusChange(e.target.value)} defaultValue="">
-            <option value="" disabled>-- Choose New Status --</option>
-            {["Approved", "Booked", "Acknowledged", "Picked", "In Transit", "Reached Warehouse", "Delivered"].map(s => (
-              <option key={s} value={s} disabled={req.status === s}>{s}</option>
-            ))}
-          </select>
-        </div>
+        {hasEditPermission && (
+          <div className="form-group" style={{ marginTop: '16px' }}>
+            <label>Change status</label>
+            <select className="form-control" onChange={e => handleStatusChange(e.target.value)} defaultValue="" style={{ cursor: 'pointer' }}>
+              <option value="" disabled>-- Choose New Status --</option>
+              {["Approved", "Booked", "Acknowledged", "Picked", "In Transit", "Reached Warehouse", "Delivered"].map(s => (
+                <option key={s} value={s} disabled={req.status === s}>{s}</option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+// ----------------------------------------------------
+// Password Strength Validator Helper & UI Indicator Component
+// ----------------------------------------------------
+export const isPasswordStrong = (password) => {
+  return (
+    password.length >= 8 &&
+    /[A-Z]/.test(password) &&
+    /[a-z]/.test(password) &&
+    /[0-9]/.test(password) &&
+    /[!@#$%^&*(),.?\":{}|<>]/.test(password)
+  );
+};
+
+export function PasswordStrengthIndicator({ password }) {
+  const rules = [
+    { label: "At least 8 characters", valid: password.length >= 8 },
+    { label: "One uppercase letter (A-Z)", valid: /[A-Z]/.test(password) },
+    { label: "One lowercase letter (a-z)", valid: /[a-z]/.test(password) },
+    { label: "One number (0-9)", valid: /[0-9]/.test(password) },
+    { label: "One special character (e.g. !@#$%^&*)", valid: /[!@#$%^&*(),.?\":{}|<>]/.test(password) }
+  ];
+
+  return (
+    <div style={{ marginTop: '8px', fontSize: '11px', lineHeight: '1.4', background: '#f9f9f8', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px', textAlign: 'left' }}>
+      <div style={{ fontWeight: '700', color: 'var(--text-main)', marginBottom: '6px' }}>Password Requirements:</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '4px' }}>
+        {rules.map((rule, idx) => (
+          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', color: rule.valid ? '#16a34a' : 'var(--text-muted)', transition: 'color 0.2s' }}>
+            <span style={{ fontWeight: 'bold' }}>{rule.valid ? "✓" : "○"}</span>
+            <span>{rule.label}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
 // ----------------------------------------------------
+// Change Password Form Component (with visibility toggles)
+// ----------------------------------------------------
+export function ChangePasswordForm({ user, apiService, closeModal }) {
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [newPass, setNewPass] = useState("");
+  const [confirmPass, setConfirmPass] = useState("");
+
+  const handleSavePassword = async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const currentPass = form.elements.currentPass.value;
+
+    if (!isPasswordStrong(newPass)) {
+      alert("Please ensure your password meets all strength requirements.");
+      return;
+    }
+    if (newPass !== confirmPass) {
+      alert("New passwords do not match");
+      return;
+    }
+
+    try {
+      await apiService.changePassword(user.id, currentPass, newPass);
+      alert("Password changed successfully!");
+      closeModal();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSavePassword} style={{ textAlign: 'left' }}>
+      <div className="form-group">
+        <label>Current Password</label>
+        <div style={{ position: 'relative' }}>
+          <input type={showCurrent ? "text" : "password"} name="currentPass" className="form-control" required style={{ cursor: 'text', paddingRight: '40px' }} />
+          <button type="button" onClick={() => setShowCurrent(!showCurrent)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }} title={showCurrent ? "Hide password" : "Show password"}>
+            {showCurrent ? <Icons.EyeSlash /> : <Icons.Eye />}
+          </button>
+        </div>
+      </div>
+      
+      <div className="form-group">
+        <label>New Password</label>
+        <div style={{ position: 'relative' }}>
+          <input type={showNew ? "text" : "password"} name="newPass" value={newPass} onChange={e => setNewPass(e.target.value)} className="form-control" required style={{ cursor: 'text', paddingRight: '40px' }} />
+          <button type="button" onClick={() => setShowNew(!showNew)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }} title={showNew ? "Hide password" : "Show password"}>
+            {showNew ? <Icons.EyeSlash /> : <Icons.Eye />}
+          </button>
+        </div>
+        <PasswordStrengthIndicator password={newPass} />
+      </div>
+
+      <div className="form-group" style={{ marginBottom: '20px' }}>
+        <label>Confirm Password</label>
+        <div style={{ position: 'relative' }}>
+          <input type={showConfirm ? "text" : "password"} name="confirmPass" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} className="form-control" required style={{ cursor: 'text', paddingRight: '40px' }} />
+          <button type="button" onClick={() => setShowConfirm(!showConfirm)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }} title={showConfirm ? "Hide password" : "Show password"}>
+            {showConfirm ? <Icons.EyeSlash /> : <Icons.Eye />}
+          </button>
+        </div>
+      </div>
+      <button type="submit" className="btn-dark" style={{ cursor: 'pointer' }}>Change Password</button>
+    </form>
+  );
+}
+
+// ----------------------------------------------------
 // 7. SETTINGS MAIN VIEW COMPONENT
 // ----------------------------------------------------
-export function SettingsView({ state, navigateTo }) {
-  const isEmployee = state.activeRole === "Employee";
-  const user = isEmployee ? state.users.employee : state.users.admin;
+export function SettingsView({ state, navigateTo, openModal, closeModal, setModalContent }) {
+  const user = state.currentUser;
+  const isMainAdmin = user.role === "Main Admin";
+  const isSubAdmin = user.role === "Sub Admin";
+
+  const showSuppliers = isMainAdmin || (isSubAdmin && user.permissions?.manage_suppliers);
+  const showLogs = isMainAdmin || (isSubAdmin && user.permissions?.view_logs);
+
+  const openChangePasswordModal = () => {
+    setModalContent(
+      <ChangePasswordForm user={user} apiService={apiService} closeModal={closeModal} />,
+      "Change Password"
+    );
+    openModal();
+  };
+
+  const handleSaveAvatar = async (updatedUser) => {
+    await apiService.saveUser(updatedUser);
+    state.setCurrentUser(updatedUser);
+    alert("Avatar setting saved successfully!");
+    closeModal();
+  };
+
+  const openAvatarModal = () => {
+    setModalContent(
+      <AvatarEditor user={user} onSave={handleSaveAvatar} onClose={closeModal} />,
+      "Customize Avatar"
+    );
+    openModal();
+  };
 
   return (
     <div>
       <header className="app-header">
         <div className="header-left">
-          <button className="back-btn" onClick={() => navigateTo('#home')}>
+          <button className="back-btn" onClick={() => navigateTo('#home')} style={{ cursor: 'pointer' }}>
             <Icons.Back />
           </button>
           <h1 style={{ fontSize: '20px' }}>Settings</h1>
@@ -981,9 +1161,9 @@ export function SettingsView({ state, navigateTo }) {
       </header>
 
       <div>
-        <div className="stat-card" style={{ marginBottom: '24px', padding: '16px' }}>
+        <div className="stat-card" style={{ marginBottom: '24px', padding: '16px', cursor: 'pointer' }} onClick={openAvatarModal}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <img src={user.avatar} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#e5dec9', border: '1px solid var(--border-color)' }} alt="profile" />
+            <UserAvatar user={user} size={48} />
             <div style={{ textAlign: 'left' }}>
               <div style={{ fontWeight: '800', fontSize: '16px', color: 'var(--text-main)' }}>{user.name}</div>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{user.role} ({user.department})</div>
@@ -993,19 +1173,31 @@ export function SettingsView({ state, navigateTo }) {
         </div>
 
         <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '12px', letterSpacing: '0.5px', paddingLeft: '4px', textAlign: 'left' }}>
-          Other Settings
+          Account Settings
         </div>
 
         <div className="settings-menu">
-          <div className="settings-item" onClick={() => navigateTo('#settings/suppliers')}>
-            <div className="settings-item-left">
-              <Icons.Users />
-              <span className="settings-title">Supplier Database</span>
+          {showSuppliers && (
+            <div className="settings-item" onClick={() => navigateTo('#settings/suppliers')} style={{ cursor: 'pointer' }}>
+              <div className="settings-item-left">
+                <Icons.Users />
+                <span className="settings-title">Supplier Database</span>
+              </div>
+              <Icons.ChevronRight />
             </div>
-            <Icons.ChevronRight />
-          </div>
+          )}
 
-          <div className="settings-item" onClick={() => navigateTo('#settings/notifications')}>
+          {isMainAdmin && (
+            <div className="settings-item" onClick={() => navigateTo('#settings/users')} style={{ cursor: 'pointer' }}>
+              <div className="settings-item-left">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" style={{ color: 'var(--primary-orange)' }}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+                <span className="settings-title">User Management</span>
+              </div>
+              <Icons.ChevronRight />
+            </div>
+          )}
+
+          <div className="settings-item" onClick={() => navigateTo('#settings/notifications')} style={{ cursor: 'pointer' }}>
             <div className="settings-item-left">
               <Icons.Bell />
               <span className="settings-title">Notification Preferences</span>
@@ -1013,27 +1205,17 @@ export function SettingsView({ state, navigateTo }) {
             <Icons.ChevronRight />
           </div>
 
-          {!isEmployee && (
-            <>
-              <div className="settings-item" onClick={() => navigateTo('#settings/logs')}>
-                <div className="settings-item-left">
-                  <Icons.Document />
-                  <span className="settings-title">Audit Trail Logs</span>
-                </div>
-                <Icons.ChevronRight />
+          {showLogs && (
+            <div className="settings-item" onClick={() => navigateTo('#settings/logs')} style={{ cursor: 'pointer' }}>
+              <div className="settings-item-left">
+                <Icons.Document />
+                <span className="settings-title">Audit Trail Logs</span>
               </div>
-
-              <div className="settings-item" onClick={() => navigateTo('#settings/automation')}>
-                <div className="settings-item-left">
-                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" style={{ color: 'var(--primary-orange)' }}><rect x="2" y="2" width="20" height="8" rx="2" ry="2" /><rect x="2" y="14" width="20" height="8" rx="2" ry="2" /><line x1="6" y1="6" x2="6.01" y2="6" /><line x1="6" y1="18" x2="6.01" y2="18" /></svg>
-                  <span className="settings-title">Branding & Automations</span>
-                </div>
-                <Icons.ChevronRight />
-              </div>
-            </>
+              <Icons.ChevronRight />
+            </div>
           )}
 
-          <div className="settings-item" onClick={() => alert("Simulation profiles are read-only.")}>
+          <div className="settings-item" onClick={openChangePasswordModal} style={{ cursor: 'pointer' }}>
             <div className="settings-item-left">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" style={{ color: 'var(--primary-orange)' }}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
               <span className="settings-title">Change Password</span>
@@ -1041,7 +1223,11 @@ export function SettingsView({ state, navigateTo }) {
             <Icons.ChevronRight />
           </div>
 
-          <div className="settings-item" style={{ color: 'var(--status-red)' }} onClick={() => alert("Mock user session logged out.")}>
+          <div className="settings-item" style={{ color: 'var(--status-red)', cursor: 'pointer' }} onClick={() => {
+            state.setCurrentUser(null);
+            localStorage.removeItem("pms_current_user");
+            navigateTo('#home');
+          }}>
             <div className="settings-item-left">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" style={{ color: 'var(--status-red)' }}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
               <span className="settings-title" style={{ fontWeight: '700' }}>Log out</span>
@@ -1211,7 +1397,7 @@ export function NotificationPreferencesView({ state, navigateTo }) {
     <div>
       <header className="app-header">
         <div className="header-left">
-          <button className="back-btn" onClick={() => navigateTo('#settings')}>
+          <button className="back-btn" onClick={() => navigateTo('#settings')} style={{ cursor: 'pointer' }}>
             <Icons.Back />
           </button>
           <h1 style={{ fontSize: '18px' }}>Preferences</h1>
@@ -1222,18 +1408,28 @@ export function NotificationPreferencesView({ state, navigateTo }) {
         <div style={{ background: '#fff', borderRadius: '12px', padding: '20px', boxShadow: 'var(--shadow-sm)', textAlign: 'left' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <div>
-              <div style={{ fontWeight: '700', fontSize: '14px', color: 'var(--text-main)' }}>☑ WhatsApp Enabled</div>
+              <div style={{ fontWeight: '700', fontSize: '14px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Icons.WhatsApp /> WhatsApp Alerts
+              </div>
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Receive automated alerts via WhatsApp.</div>
             </div>
-            <input type="checkbox" style={{ width: '20px', height: '20px', accentColor: 'var(--primary-orange)' }} checked={whatsapp} onChange={() => handleToggle('whatsapp')} />
+            <label className="switch">
+              <input type="checkbox" checked={whatsapp} onChange={() => handleToggle('whatsapp')} style={{ cursor: 'pointer' }} />
+              <span className="slider round"></span>
+            </label>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <div style={{ fontWeight: '700', fontSize: '14px', color: 'var(--text-main)' }}>☑ App Notifications Enabled</div>
+              <div style={{ fontWeight: '700', fontSize: '14px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '16px' }}>🔔</span> App Push Toast
+              </div>
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Get real-time push toast alerts inside app.</div>
             </div>
-            <input type="checkbox" style={{ width: '20px', height: '20px', accentColor: 'var(--primary-orange)' }} checked={appNotifs} onChange={() => handleToggle('app')} />
+            <label className="switch">
+              <input type="checkbox" checked={appNotifs} onChange={() => handleToggle('app')} style={{ cursor: 'pointer' }} />
+              <span className="slider round"></span>
+            </label>
           </div>
         </div>
       </div>
@@ -1288,19 +1484,19 @@ export function AuditLogsView({ state, navigateTo }) {
     <div>
       <header className="app-header">
         <div className="header-left">
-          <button className="back-btn" onClick={() => navigateTo('#settings')}>
+          <button className="back-btn" onClick={() => navigateTo('#settings')} style={{ cursor: 'pointer' }}>
             <Icons.Back />
           </button>
           <h1 style={{ fontSize: '18px' }}>Audit Trail Logs</h1>
         </div>
         <div className="header-right">
-          <button className="btn-orange" style={{ padding: '6px 12px', fontSize: '11px' }} onClick={handleExport}>Export CSV</button>
+          <button className="btn-orange" style={{ padding: '6px 12px', fontSize: '11px', cursor: 'pointer' }} onClick={handleExport}>Export CSV</button>
         </div>
       </header>
 
       <div style={{ paddingTop: '10px' }}>
         <div className="form-group">
-          <input type="text" className="form-control" placeholder="Search logs..." value={query} onChange={e => setQuery(e.target.value)} />
+          <input type="text" className="form-control" placeholder="Search logs..." value={query} onChange={e => setQuery(e.target.value)} style={{ cursor: 'text' }} />
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {logs.length === 0 ? (
@@ -1326,6 +1522,712 @@ export function AuditLogsView({ state, navigateTo }) {
             })
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------
+// 11. ORDER HISTORY VIEW COMPONENT
+// ----------------------------------------------------
+export function OrderHistoryView({ state, navigateTo }) {
+  const user = state.currentUser;
+  const isEmployee = user.role === "Employee";
+
+  const historyStatuses = ["Delivered", "Rejected"];
+  
+  const filteredRequests = isEmployee 
+    ? state.requests.filter(r => r.employeeName === user.name && historyStatuses.includes(r.status)) 
+    : state.requests.filter(r => historyStatuses.includes(r.status));
+
+  const sorted = [...filteredRequests].sort((a, b) => {
+    return new Date(b.date) - new Date(a.date);
+  });
+
+  return (
+    <div>
+      <header className="app-header">
+        <div className="header-left">
+          <button className="back-btn" onClick={() => navigateTo('#home')} style={{ cursor: 'pointer' }}>
+            <Icons.Back />
+          </button>
+          <h1 style={{ fontSize: '20px' }}>Order history</h1>
+        </div>
+        <div className="header-right">
+          <div style={{ background: '#e5dec9', fontSize: '12px', fontWeight: '800', padding: '4px 8px', borderRadius: '4px', color: 'var(--text-main)' }}>
+            {filteredRequests.length}
+          </div>
+        </div>
+      </header>
+
+      <div style={{ paddingTop: '10px' }}>
+        {sorted.length === 0 ? (
+          <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+            No completed history found.
+          </div>
+        ) : (
+          sorted.map(req => {
+            const supplier = state.suppliers.find(s => s.id === req.supplierId) || { companyName: "Not Assigned" };
+            return (
+              <div key={req.id} className="live-order-card" onClick={() => navigateTo(`#order-details?id=${req.id}`)} style={{ cursor: 'pointer' }}>
+                <div className="card-header-row">
+                  <h3>{supplier.companyName}</h3>
+                  <span className="badge-view-details">Details</span>
+                </div>
+                
+                <div className="card-product-line">
+                  Product name - <b>{req.productName}</b> ({req.qty} {req.units})
+                </div>
+
+                <div className="card-status-line">
+                  <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>{req.id}</span>
+                  <span className={`status-badge ${req.status.toLowerCase().replace(/ /g, '')}`}>{req.status}</span>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------
+// 12. LOGIN VIEW COMPONENT
+// ----------------------------------------------------
+export function LoginView({ onLogin }) {
+  const [isRegistering, setIsRegistering] = useState(false);
+  
+  // Login fields
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Registration (Sign In / Create Account) fields
+  const [regUsername, setRegUsername] = useState("");
+  const [regFullName, setRegFullName] = useState("");
+  const [regDepartment, setRegDepartment] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+  const [regConfirmPass, setRegConfirmPass] = useState("");
+  const [showRegPassword, setShowRegPassword] = useState(false);
+  const [showRegConfirm, setShowRegConfirm] = useState(false);
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleLoginSubmit = async (e) => {
+    e.preventDefault();
+    if (!username || !password) {
+      setError("Please fill in both fields.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const user = await apiService.authenticate(username, password);
+      onLogin(user);
+    } catch (err) {
+      setError(err.message || "Invalid username or password");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegisterSubmit = async (e) => {
+    e.preventDefault();
+    if (!regUsername || !regFullName || !regDepartment || !regPassword || !regConfirmPass) {
+      setError("Please fill in all fields.");
+      return;
+    }
+    if (!isPasswordStrong(regPassword)) {
+      setError("Please ensure your password meets all strength requirements.");
+      return;
+    }
+    if (regPassword !== regConfirmPass) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    try {
+      // Check if username already exists
+      const users = await apiService.getUsers();
+      const exists = users.some(u => u.username.toLowerCase() === regUsername.toLowerCase());
+      if (exists) {
+        throw new Error("Username already exists. Please choose another.");
+      }
+
+      // Hash password
+      const passwordHash = await hashPassword(regPassword);
+
+      // Create new user object - Force Employee role for security
+      const newUser = {
+        id: "usr-" + Math.random().toString(36).slice(-8),
+        username: regUsername,
+        name: regFullName,
+        role: "Employee",
+        department: regDepartment,
+        passwordHash,
+        enabled: true,
+        mustChangePassword: false, 
+        avatar: "",
+        permissions: null
+      };
+
+      await apiService.saveUser(newUser);
+      alert("Registration successful! Logging you in.");
+      onLogin(newUser);
+    } catch (err) {
+      setError(err.message || "Failed to register account.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '80vh', justifyContent: 'center', padding: '20px' }}>
+      <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+        <h1 style={{ fontSize: '28px', color: 'var(--primary-orange)', fontWeight: '800' }}>Alagiri</h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '6px' }}>Procurement & Logistics System</p>
+      </div>
+
+      <div style={{ background: 'var(--card-bg)', border: '1.5px solid var(--border-color)', borderRadius: 'var(--border-radius-lg)', padding: '24px', boxShadow: 'var(--shadow-md)' }}>
+        
+        {/* Toggle tabs for Log In vs Sign In (Register) */}
+        <div style={{ display: 'flex', borderBottom: '2px solid var(--border-color)', marginBottom: '20px' }}>
+          <button type="button" onClick={() => { setIsRegistering(false); setError(""); }} style={{ flex: 1, padding: '10px', background: 'none', border: 'none', borderBottom: !isRegistering ? '2px solid var(--primary-orange)' : 'none', fontWeight: !isRegistering ? '800' : '600', color: !isRegistering ? 'var(--primary-orange)' : 'var(--text-muted)', cursor: 'pointer', transition: 'all 0.2s' }}>
+            Log In
+          </button>
+          <button type="button" onClick={() => { setIsRegistering(true); setError(""); }} style={{ flex: 1, padding: '10px', background: 'none', border: 'none', borderBottom: isRegistering ? '2px solid var(--primary-orange)' : 'none', fontWeight: isRegistering ? '800' : '600', color: isRegistering ? 'var(--primary-orange)' : 'var(--text-muted)', cursor: 'pointer', transition: 'all 0.2s' }}>
+            Sign In (Register)
+          </button>
+        </div>
+
+        {error && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fee2e2', color: '#ef4444', padding: '10px 14px', borderRadius: '8px', fontSize: '12px', marginBottom: '16px', textAlign: 'left' }}>
+            ⚠️ {error}
+          </div>
+        )}
+
+        {!isRegistering ? (
+          /* LOG IN FORM */
+          <form onSubmit={handleLoginSubmit} style={{ textAlign: 'left' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '16px', color: 'var(--text-main)' }}>Sign In to your account</h2>
+            
+            <div className="form-group">
+              <label>Username</label>
+              <input type="text" className="form-control" placeholder="Enter Username" value={username} onChange={e => setUsername(e.target.value)} required style={{ cursor: 'text' }} />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '20px' }}>
+              <label>Password</label>
+              <div style={{ position: 'relative' }}>
+                <input type={showPassword ? "text" : "password"} className="form-control" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required style={{ cursor: 'text', paddingRight: '40px' }} />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }} title={showPassword ? "Hide password" : "Show password"}>
+                  {showPassword ? <Icons.EyeSlash /> : <Icons.Eye />}
+                </button>
+              </div>
+            </div>
+
+            <button type="submit" className="btn-orange" disabled={loading} style={{ width: '100%', padding: '12px', fontSize: '14px', cursor: 'pointer' }}>
+              {loading ? "Authenticating..." : "Login"}
+            </button>
+          </form>
+        ) : (
+          /* SIGN IN (REGISTRATION) FORM */
+          <form onSubmit={handleRegisterSubmit} style={{ textAlign: 'left' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '16px', color: 'var(--text-main)' }}>Register New Account</h2>
+            
+            <div className="form-group">
+              <label>Username</label>
+              <input type="text" className="form-control" placeholder="e.g. johndoe" value={regUsername} onChange={e => setRegUsername(e.target.value)} required style={{ cursor: 'text' }} />
+            </div>
+
+            <div className="form-group">
+              <label>Full Name</label>
+              <input type="text" className="form-control" placeholder="e.g. John Doe" value={regFullName} onChange={e => setRegFullName(e.target.value)} required style={{ cursor: 'text' }} />
+            </div>
+
+            <div className="form-group">
+              <label>Department</label>
+              <input type="text" className="form-control" placeholder="e.g. Maintenance" value={regDepartment} onChange={e => setRegDepartment(e.target.value)} required style={{ cursor: 'text' }} />
+            </div>
+
+
+
+            <div className="form-group">
+              <label>Password</label>
+              <div style={{ position: 'relative' }}>
+                <input type={showRegPassword ? "text" : "password"} className="form-control" placeholder="••••••••" value={regPassword} onChange={e => setRegPassword(e.target.value)} required style={{ cursor: 'text', paddingRight: '40px' }} />
+                <button type="button" onClick={() => setShowRegPassword(!showRegPassword)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }} title={showRegPassword ? "Hide password" : "Show password"}>
+                  {showRegPassword ? <Icons.EyeSlash /> : <Icons.Eye />}
+                </button>
+              </div>
+              <PasswordStrengthIndicator password={regPassword} />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '20px' }}>
+              <label>Confirm Password</label>
+              <div style={{ position: 'relative' }}>
+                <input type={showRegConfirm ? "text" : "password"} className="form-control" placeholder="••••••••" value={regConfirmPass} onChange={e => setRegConfirmPass(e.target.value)} required style={{ cursor: 'text', paddingRight: '40px' }} />
+                <button type="button" onClick={() => setShowRegConfirm(!showRegConfirm)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }} title={showRegConfirm ? "Hide password" : "Show password"}>
+                  {showRegConfirm ? <Icons.EyeSlash /> : <Icons.Eye />}
+                </button>
+              </div>
+            </div>
+
+            <button type="submit" className="btn-orange" disabled={loading} style={{ width: '100%', padding: '12px', fontSize: '14px', cursor: 'pointer' }}>
+              {loading ? "Registering..." : "Register (Sign In)"}
+            </button>
+          </form>
+        )}
+      </div>
+      <div style={{ textAlign: 'center', marginTop: '24px', fontSize: '11px', color: 'var(--text-muted)' }}>
+        Version 2.0.0 • Secure Authentication
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------
+// 13. FORCE CHANGE PASSWORD VIEW
+// ----------------------------------------------------
+export function ForceChangePasswordView({ user, onPasswordChanged }) {
+  const [newPass, setNewPass] = useState("");
+  const [confirmPass, setConfirmPass] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!isPasswordStrong(newPass)) {
+      setError("Please ensure your password meets all strength requirements.");
+      return;
+    }
+    if (newPass !== confirmPass) {
+      setError("Passwords do not match.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const updatedUser = await apiService.forceChangePassword(user.id, newPass);
+      alert("Password changed successfully! Welcome to Alagiri.");
+      onPasswordChanged(updatedUser);
+    } catch (err) {
+      setError(err.message || "An error occurred");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '80vh', justifyContent: 'center', padding: '20px' }}>
+      <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+        <h1 style={{ fontSize: '24px', color: 'var(--primary-orange)', fontWeight: '800' }}>Setup New Password</h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '6px' }}>For security, you must update your temporary password on your first login.</p>
+      </div>
+
+      <div style={{ background: 'var(--card-bg)', border: '1.5px solid var(--border-color)', borderRadius: 'var(--border-radius-lg)', padding: '24px', boxShadow: 'var(--shadow-md)' }}>
+        <form onSubmit={handleSubmit} style={{ textAlign: 'left' }}>
+          {error && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fee2e2', color: '#ef4444', padding: '10px 14px', borderRadius: '8px', fontSize: '12px', marginBottom: '16px' }}>
+              ⚠️ {error}
+            </div>
+          )}
+
+          <div className="form-group">
+            <label>New Password</label>
+            <div style={{ position: 'relative' }}>
+              <input type={showNewPass ? "text" : "password"} className="form-control" placeholder="••••••••" value={newPass} onChange={e => setNewPass(e.target.value)} required style={{ cursor: 'text', paddingRight: '40px' }} />
+              <button type="button" onClick={() => setShowNewPass(!showNewPass)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }} title={showNewPass ? "Hide password" : "Show password"}>
+                {showNewPass ? <Icons.EyeSlash /> : <Icons.Eye />}
+              </button>
+            </div>
+            <PasswordStrengthIndicator password={newPass} />
+          </div>
+
+          <div className="form-group" style={{ marginBottom: '20px' }}>
+            <label>Confirm Password</label>
+            <div style={{ position: 'relative' }}>
+              <input type={showConfirmPass ? "text" : "password"} className="form-control" placeholder="••••••••" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} required style={{ cursor: 'text', paddingRight: '40px' }} />
+              <button type="button" onClick={() => setShowConfirmPass(!showConfirmPass)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }} title={showConfirmPass ? "Hide password" : "Show password"}>
+                {showConfirmPass ? <Icons.EyeSlash /> : <Icons.Eye />}
+              </button>
+            </div>
+          </div>
+
+          <button type="submit" className="btn-orange" disabled={loading} style={{ width: '100%', padding: '12px', fontSize: '14px', cursor: 'pointer' }}>
+            {loading ? "Updating..." : "Save Password"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------
+// 14. USER MANAGEMENT VIEW COMPONENT
+// ----------------------------------------------------
+export function UserManagementView({ state, navigateTo }) {
+  const [users, setUsers] = useState([]);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editUser, setEditUser] = useState(null);
+
+  // Form states
+  const [username, setUsername] = useState("");
+  const [name, setName] = useState("");
+  const [role, setRole] = useState("Employee");
+  const [department, setDepartment] = useState("Kraft Mill");
+  const [permissions, setPermissions] = useState({
+    approve_requests: false,
+    manage_suppliers: false,
+    view_logs: false,
+    edit_orders: false
+  });
+
+  const loadUsers = async () => {
+    const list = await apiService.getUsers();
+    setUsers(list);
+  };
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  const handleTogglePerm = (perm) => {
+    setPermissions(prev => ({
+      ...prev,
+      [perm]: !prev[perm]
+    }));
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    if (!username || !name) {
+      alert("Username and Full Name are required");
+      return;
+    }
+
+    try {
+      if (editUser) {
+        // Edit User
+        const updated = {
+          ...editUser,
+          name,
+          role,
+          department,
+          permissions: role === "Sub Admin" ? permissions : {}
+        };
+        await apiService.saveUser(updated);
+        state.logEvent("Edited User Account", editUser.username, username, `Main Admin updated user settings for ${username}.`);
+      } else {
+        // Create User
+        const newUser = {
+          id: `usr-${Date.now()}`,
+          username,
+          name,
+          role,
+          department,
+          disabled: false,
+          permissions: role === "Sub Admin" ? permissions : {}
+        };
+        const tempPassword = await apiService.createUser(newUser);
+        alert(`User created successfully!\n\nTemporary Password: ${tempPassword}\n\nShare this secure password with the user. They will be forced to change it on their first login.`);
+        state.logEvent("Created User Account", "None", username, `Main Admin created account for ${username} with role ${role}.`);
+      }
+
+      // Reset & Reload
+      setShowAddForm(false);
+      setEditUser(null);
+      setUsername("");
+      setName("");
+      setRole("Employee");
+      setDepartment("Kraft Mill");
+      setPermissions({
+        approve_requests: false,
+        manage_suppliers: false,
+        view_logs: false,
+        edit_orders: false
+      });
+      loadUsers();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleEdit = (u) => {
+    setEditUser(u);
+    setUsername(u.username);
+    setName(u.name);
+    setRole(u.role);
+    setDepartment(u.department || "Kraft Mill");
+    setPermissions(u.permissions || {
+      approve_requests: false,
+      manage_suppliers: false,
+      view_logs: false,
+      edit_orders: false
+    });
+    setShowAddForm(true);
+  };
+
+  const handleToggleDisable = async (u) => {
+    if (u.role === "Main Admin") {
+      alert("Main Admin cannot be disabled");
+      return;
+    }
+    const updated = {
+      ...u,
+      disabled: !u.disabled
+    };
+    await apiService.saveUser(updated);
+    state.logEvent(u.disabled ? "Enabled User Account" : "Disabled User Account", u.username, u.username, `Main Admin toggled account state.`);
+    loadUsers();
+  };
+
+  const handleResetPassword = async (u) => {
+    const confirmReset = window.confirm(`Are you sure you want to reset password for ${u.name}?`);
+    if (!confirmReset) return;
+    
+    try {
+      const tempPass = await apiService.resetUserPassword(u.id);
+      alert(`Password reset successful!\n\nNew Temporary Password: ${tempPass}\n\nUser will be forced to change it on their next login.`);
+      state.logEvent("Reset User Password", u.username, u.username, `Main Admin reset password for ${u.username}.`);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  return (
+    <div>
+      <header className="app-header">
+        <div className="header-left">
+          <button className="back-btn" onClick={() => navigateTo('#settings')} style={{ cursor: 'pointer' }}>
+            <Icons.Back />
+          </button>
+          <h1 style={{ fontSize: '18px' }}>User Management</h1>
+        </div>
+        <div className="header-right">
+          <button className="btn-orange" style={{ padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }} onClick={() => {
+            setEditUser(null);
+            setUsername("");
+            setName("");
+            setRole("Employee");
+            setDepartment("Kraft Mill");
+            setPermissions({
+              approve_requests: false,
+              manage_suppliers: false,
+              view_logs: false,
+              edit_orders: false
+            });
+            setShowAddForm(true);
+          }}>
+            Add User
+          </button>
+        </div>
+      </header>
+
+      <div style={{ paddingTop: '10px' }}>
+        {showAddForm ? (
+          <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-md)', padding: '20px', textAlign: 'left', marginBottom: '20px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '16px' }}>
+              {editUser ? 'Edit User Details' : 'Create New Account'}
+            </h3>
+            
+            <form onSubmit={handleSave}>
+              <div className="form-group">
+                <label>Username</label>
+                <input type="text" className="form-control" value={username} onChange={e => setUsername(e.target.value)} disabled={!!editUser} required style={{ cursor: editUser ? 'not-allowed' : 'text' }} />
+              </div>
+
+              <div className="form-group">
+                <label>Full Name</label>
+                <input type="text" className="form-control" value={name} onChange={e => setName(e.target.value)} required style={{ cursor: 'text' }} />
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Role</label>
+                  <select className="form-control" value={role} onChange={e => setRole(e.target.value)} style={{ cursor: 'pointer' }}>
+                    <option value="Employee">Employee</option>
+                    <option value="Sub Admin">Sub Admin</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Department</label>
+                  <input type="text" className="form-control" value={department} onChange={e => setDepartment(e.target.value)} style={{ cursor: 'text' }} />
+                </div>
+              </div>
+
+              {role === "Sub Admin" && (
+                <div style={{ marginTop: '16px', marginBottom: '16px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Configurable Permissions</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                      <input type="checkbox" checked={permissions.approve_requests} onChange={() => handleTogglePerm('approve_requests')} style={{ cursor: 'pointer', width: '18px', height: '18px' }} />
+                      <span>Can Approve Requests</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                      <input type="checkbox" checked={permissions.manage_suppliers} onChange={() => handleTogglePerm('manage_suppliers')} style={{ cursor: 'pointer', width: '18px', height: '18px' }} />
+                      <span>Can Manage Suppliers</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                      <input type="checkbox" checked={permissions.view_logs} onChange={() => handleTogglePerm('view_logs')} style={{ cursor: 'pointer', width: '18px', height: '18px' }} />
+                      <span>Can View Audit Logs</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                      <input type="checkbox" checked={permissions.edit_orders} onChange={() => handleTogglePerm('edit_orders')} style={{ cursor: 'pointer', width: '18px', height: '18px' }} />
+                      <span>Can Edit Order Timelines</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+                <button type="button" className="btn-dark" style={{ flex: 1, backgroundColor: '#9ca3af', marginBottom: 0 }} onClick={() => setShowAddForm(false)}>Cancel</button>
+                <button type="submit" className="btn-orange" style={{ flex: 1.5 }}>Save Account</button>
+              </div>
+            </form>
+          </div>
+        ) : null}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {users.map(u => (
+            <div key={u.id} style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-md)', padding: '16px', textAlign: 'left', opacity: u.disabled ? 0.6 : 1 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <UserAvatar user={u} size={40} />
+                  <div>
+                    <div style={{ fontWeight: '800', fontSize: '14px' }}>{u.name}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>@{u.username} • {u.role} ({u.department || 'N/A'})</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button className="badge-view-details" onClick={() => handleEdit(u)} style={{ backgroundColor: 'var(--primary-orange)', cursor: 'pointer' }}>Edit</button>
+                  {u.role !== "Main Admin" && (
+                    <button className="badge-view-details" onClick={() => handleToggleDisable(u)} style={{ backgroundColor: u.disabled ? 'var(--status-green)' : 'var(--status-red)', cursor: 'pointer' }}>
+                      {u.disabled ? 'Enable' : 'Disable'}
+                    </button>
+                  )}
+                  <button className="badge-view-details" onClick={() => handleResetPassword(u)} style={{ backgroundColor: 'var(--text-main)', cursor: 'pointer' }}>Reset Pass</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------
+// 15. USER AVATAR HELPER COMPONENT
+// ----------------------------------------------------
+export function UserAvatar({ user, size = 40 }) {
+  if (!user) return null;
+  
+  if (user.avatar && user.avatar.startsWith("data:")) {
+    return (
+      <img src={user.avatar} style={{ width: `${size}px`, height: `${size}px`, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid var(--border-color)' }} alt="Avatar" />
+    );
+  }
+
+  // Get initials
+  const initials = user.name ? user.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : "U";
+
+  // Color code fallback
+  let bgColor = "#0d9488"; // default employee
+  if (user.role === "Main Admin") {
+    bgColor = "#7c3aed"; // purple
+  } else if (user.role === "Sub Admin") {
+    bgColor = "#2563eb"; // blue
+  } else if (user.role === "Employee") {
+    bgColor = "#0d9488"; // teal
+  }
+
+  return (
+    <div style={{
+      width: `${size}px`,
+      height: `${size}px`,
+      borderRadius: '50%',
+      backgroundColor: bgColor,
+      color: '#ffffff',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontWeight: 'bold',
+      fontSize: `${size * 0.4}px`,
+      border: '1.5px solid var(--border-color)',
+      userSelect: 'none'
+    }}>
+      {initials}
+    </div>
+  );
+}
+
+// ----------------------------------------------------
+// 16. AVATAR EDITOR DRAWER COMPONENT
+// ----------------------------------------------------
+export function AvatarEditor({ user, onSave, onClose }) {
+  const [avatar, setAvatar] = useState(user.avatar || "");
+  
+  const presets = [
+    "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%23ea580c'/><text x='50' y='60' font-size='30' text-anchor='middle' fill='white'>🤖</text></svg>",
+    "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%230d9488'/><text x='50' y='60' font-size='30' text-anchor='middle' fill='white'>🦊</text></svg>",
+    "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%232563eb'/><text x='50' y='60' font-size='30' text-anchor='middle' fill='white'>🦉</text></svg>",
+    "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%237c3aed'/><text x='50' y='60' font-size='30' text-anchor='middle' fill='white'>🐯</text></svg>"
+  ];
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setAvatar(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSave = () => {
+    onSave({
+      ...user,
+      avatar
+    });
+  };
+
+  return (
+    <div style={{ textAlign: 'left' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
+        <UserAvatar user={{ ...user, avatar }} size={80} />
+      </div>
+
+      <div className="form-group">
+        <label>Upload Custom Picture</label>
+        <div className="lr-upload-box" style={{ cursor: 'pointer' }}>
+          <div className="lr-text-primary">Choose Photo File</div>
+          <input type="file" accept="image/*" onChange={handleFileUpload} style={{ cursor: 'pointer' }} />
+          <span className="badge-view-lr">Browse</span>
+        </div>
+      </div>
+
+      <div className="form-group" style={{ marginTop: '16px' }}>
+        <label>Preset Avatars</label>
+        <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+          {presets.map((p, idx) => (
+            <img key={idx} src={p} style={{ width: '44px', height: '44px', borderRadius: '50%', cursor: 'pointer', border: avatar === p ? '3px solid var(--primary-orange)' : '1px solid var(--border-color)', padding: '2px' }} onClick={() => setAvatar(p)} alt="Preset" />
+          ))}
+          <button type="button" className="btn-dark" style={{ width: '44px', height: '44px', borderRadius: '50%', padding: 0, fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e5e7eb', border: '1px solid #d1d5db', color: '#374151', cursor: 'pointer' }} onClick={() => setAvatar("")}>
+            Reset
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+        <button className="btn-dark" style={{ flex: 1, backgroundColor: '#9ca3af', marginBottom: 0, cursor: 'pointer' }} onClick={onClose}>Cancel</button>
+        <button className="btn-orange" style={{ flex: 1.5, cursor: 'pointer' }} onClick={handleSave}>Save Changes</button>
       </div>
     </div>
   );
