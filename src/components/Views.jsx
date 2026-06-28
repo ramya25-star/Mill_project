@@ -1784,7 +1784,10 @@ export function LoginView({ onLogin }) {
         )}
       </div>
       <div style={{ textAlign: 'center', marginTop: '24px', fontSize: '11px', color: 'var(--text-muted)' }}>
-        Version 2.0.0 • Secure Authentication
+        <div>Version 2.0.0 • Secure Authentication</div>
+        <button type="button" onClick={() => { localStorage.clear(); location.reload(); }} style={{ marginTop: '10px', background: 'none', border: 'none', color: 'var(--primary-orange)', textDecoration: 'underline', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
+          Reset Simulation Database (Clear Storage)
+        </button>
       </div>
     </div>
   );
