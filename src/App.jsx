@@ -17,6 +17,8 @@ import {
   LoginView,
   ForceChangePasswordView,
   UserManagementView,
+  PendingOrdersView,
+  DepartmentManagementView,
   Icons
 } from './components/Views';
 
@@ -104,7 +106,17 @@ export default function App() {
         // Load custom branding if configured in local storage
         const savedBranding = localStorage.getItem("pms_branding");
         if (savedBranding) {
-          setBranding(JSON.parse(savedBranding));
+          try {
+            const parsed = JSON.parse(savedBranding);
+            if (parsed.appName && (parsed.appName.includes("Tamizhan") || parsed.companyName?.includes("Tamizhan"))) {
+              localStorage.clear();
+              window.location.reload();
+              return;
+            }
+            setBranding(parsed);
+          } catch (e) {
+            setBranding(JSON.parse(savedBranding));
+          }
         }
 
         // Webhook URL
@@ -261,7 +273,7 @@ export default function App() {
 
   const handleManualWebhookTrigger = (eventKey) => {
     if (!webhookUrl) {
-      alert("Please configure a Webhook URL first inside settings or right sidebar!");
+      showToast("Webhook Configuration Required", "Please configure a Webhook URL first inside settings or right sidebar!", "success");
       return;
     }
     const sampleReq = requests[Math.floor(Math.random() * requests.length)] || CONFIG.initialRequests[0];
@@ -285,10 +297,11 @@ export default function App() {
       ],
       quickReplies: [
         { text: "Accepted", reply: "Thank you for the PO. We have accepted the order and are processing it." },
-        { text: "Material Sent", reply: "The material has been dispatched. Here is the LR Copy Link: https://api.alagiri.com/receipt/LR-4421.png" },
-        { text: "Delayed", reply: "We regret to inform you that shipment is delayed by 3 days due to transport issues." },
-        { text: "Out of Stock", reply: "Apologies, this item is currently out of stock. Lead time is 15 days." },
-        { text: "Need Clarification", reply: "Please clarify the dimension specifications for pulley sprocket bearings." }
+        { text: "Rejected", reply: "Apologies, we cannot fulfill this order at this moment. Order rejected." },
+        { text: "Picked", reply: "Material has been picked and packed from our store." },
+        { text: "Dispatched", reply: "The material has been dispatched. Here is the LR Copy Link: https://api.alagiri.com/receipt/LR-4421.png" },
+        { text: "Delivered", reply: "Material delivered and handed over at site. Delivery confirmed." },
+        { text: "Delayed", reply: "We regret to inform you that shipment is delayed by 3 days due to transport issues." }
       ]
     });
   };
@@ -307,16 +320,18 @@ export default function App() {
     let triggerEvent = "supplier.response";
 
     if (status === "Accepted") systemStatus = "Acknowledged";
-    else if (status === "Material Sent") systemStatus = "In Transit";
-    else if (status === "Delayed") systemStatus = "No Response";
-    else if (status === "Out of Stock") systemStatus = "Rejected";
-    else if (status === "Need Clarification") systemStatus = "Pending";
+    else if (status === "Rejected") systemStatus = "Rejected";
+    else if (status === "Picked") systemStatus = "Picked";
+    else if (status === "Dispatched") systemStatus = "In Transit";
+    else if (status === "Delivered") systemStatus = "Delivered";
+    else if (status === "Delayed") systemStatus = "Delayed";
+    else systemStatus = "Pending";
 
     const req = requests.find(r => r.id === chatThread.requestId);
     const prevStatus = req.status;
 
     let lrCopyData = null;
-    if (status === "Material Sent") {
+    if (status === "Dispatched") {
       lrCopyData = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><rect width='200' height='200' fill='%23cbd5e1'/><text x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='14' fill='%23334155'>Supplier Whatsapp Receipt</text></svg>";
     }
 
@@ -339,7 +354,7 @@ export default function App() {
     setRequests(requests.map(r => r.id === chatThread.requestId ? saved : r));
 
     logEvent("Supplier Response", prevStatus, systemStatus, `Supplier WhatsApp reply "${status}": ${text}`);
-    addNotification("Supplier Response Received", `Supplier AB Company updated ${chatThread.requestId} status to ${systemStatus}.`, "Both");
+    addNotification("Supplier Response Received", `Supplier ${chatThread.supplierName || 'AB Company'} updated ${chatThread.requestId} status to ${systemStatus}.`, "Both");
 
     triggerWebhook(triggerEvent, saved);
   };
@@ -377,7 +392,8 @@ export default function App() {
         triggerWebhook,
         initWhatsAppThread,
         currentUser,
-        setCurrentUser
+        setCurrentUser,
+        showToast
       },
       navigateTo: (h) => { window.location.hash = h; },
       addNotification,
@@ -401,7 +417,7 @@ export default function App() {
 
     // Force Password Reset Guard
     if (currentUser.mustChangePassword) {
-      return <ForceChangePasswordView user={currentUser} onPasswordChanged={(updatedUser) => {
+      return <ForceChangePasswordView key="force-change-password-view" state={navProps.state} user={currentUser} onPasswordChanged={(updatedUser) => {
         setCurrentUser(updatedUser);
         localStorage.setItem("pms_current_user", JSON.stringify(updatedUser));
         window.location.hash = "#home";
@@ -425,6 +441,8 @@ export default function App() {
         return <PoPreviewView {...navProps} requestId={params.id} />;
       case '#live-orders':
         return <LiveOrdersView {...navProps} />;
+      case '#pending-orders':
+        return <PendingOrdersView {...navProps} />;
       case '#order-details':
         return <OrderDetailsView {...navProps} requestId={params.id} />;
       case '#settings':
@@ -452,6 +470,13 @@ export default function App() {
           return null;
         }
         return <UserManagementView {...navProps} />;
+      case '#settings/departments':
+        // Guard: Main Admin only
+        if (currentUser.role !== 'Main Admin') {
+          window.location.hash = '#settings';
+          return null;
+        }
+        return <DepartmentManagementView {...navProps} />;
       case '#order-history':
         return <OrderHistoryView {...navProps} />;
     }
@@ -459,13 +484,13 @@ export default function App() {
 
   // Render active bottom floating navigation tabs
   const renderBottomNavTabs = () => {
-    const isAdmin = activeRole === "Admin";
+    const isAdmin = activeRole === "Main Admin" || activeRole === "Sub Admin";
     const path = currentHash.split('?')[0];
 
     const tabs = [
       { path: '#home', label: 'Home', icon: <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> },
       { path: isAdmin ? '#requested-orders' : '#create-request', label: isAdmin ? 'Approvals' : 'Request', icon: <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> },
-      { path: '#live-orders', label: 'Orders', icon: <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> },
+      { path: '#order-history', label: 'History', icon: <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> },
       { path: '#settings', label: 'Settings', icon: <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> }
     ];
 
@@ -485,7 +510,7 @@ export default function App() {
       const uList = await apiService.getUsers();
       let targetUser = uList.find(u => u.username === username);
       if (!targetUser) {
-        alert(`User ${username} not found.`);
+        showToast("User Session Error", `User ${username} not found.`, "success");
         return;
       }
       
@@ -509,7 +534,25 @@ export default function App() {
           {/* Toast Notification Layers */}
           <div className="toast-container">
             {toasts.map(t => (
-              <div key={t.id} className={`toast ${t.type}`}>
+              <div key={t.id} className={`toast ${t.type}`} style={{ position: 'relative', paddingRight: '28px' }}>
+                <button 
+                  onClick={() => setToasts(prev => prev.filter(toast => toast.id !== t.id))}
+                  style={{
+                    position: 'absolute',
+                    top: '8px',
+                    right: '8px',
+                    border: 'none',
+                    background: 'none',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    color: 'var(--text-muted)',
+                    lineHeight: '1',
+                    padding: '2px'
+                  }}
+                  title="Dismiss"
+                >
+                  ✕
+                </button>
                 <div className="toast-title">{t.title}</div>
                 <div className="toast-body">{t.body}</div>
                 <div className="toast-meta">Just now</div>

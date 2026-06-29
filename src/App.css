@@ -4,7 +4,7 @@
 
 /* Color Variables and Theme Defaults */
 :root {
-  --bg-cream: #f5ede6;
+  --bg-cream: #ffffff;
   --primary-orange: #e67e35;
   --primary-orange-hover: #c56422;
   --dark-charcoal: #232120;
@@ -64,7 +64,7 @@ body {
   max-width: 480px;
   height: 100vh;
   position: relative;
-  background-color: var(--bg-cream);
+  background-color: #ffffff;
   box-shadow: var(--shadow-lg), 0 0 100px rgba(0, 0, 0, 0.6);
   display: flex;
   flex-direction: column;
@@ -74,7 +74,7 @@ body {
 .device-frame {
   width: 100%;
   height: 100%;
-  background-color: var(--bg-cream);
+  background-color: #ffffff;
   position: relative;
   overflow: hidden;
   display: flex;
@@ -895,6 +895,11 @@ body {
   font-size: 14px;
   color: var(--text-main);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  box-sizing: border-box;
+}
+
+input.form-control, select.form-control {
+  height: 44px;
 }
 
 .form-control:focus {
@@ -959,16 +964,21 @@ body {
   color: #ffffff;
 }
 
-.status-badge.pending { background-color: var(--status-orange); }
-.status-badge.approved { background-color: var(--status-blue); }
-.status-badge.rejected { background-color: var(--status-red); }
-.status-badge.intransit { background-color: var(--status-blue); }
-.status-badge.reachedwarehouse { background-color: var(--status-green); }
-.status-badge.delivered { background-color: var(--status-green); }
-.status-badge.noresponse { background-color: var(--status-red); }
-.status-badge.booked { background-color: var(--status-blue); }
-.status-badge.acknowledged { background-color: var(--status-orange); }
-.status-badge.lrcopyreceived { background-color: var(--status-green); }
+.status-badge.pending { background-color: #eab308; color: #ffffff; }
+.status-badge.approved { background-color: #2563eb; color: #ffffff; }
+.status-badge.rejected { background-color: #6b7280; color: #ffffff; }
+.status-badge.intransit { background-color: #0ea5e9; color: #ffffff; }
+.status-badge.reachedwarehouse { background-color: #10b981; color: #ffffff; }
+.status-badge.delivered { background-color: #15803d; color: #ffffff; }
+.status-badge.noresponse { background-color: #ef4444; color: #ffffff; }
+.status-badge.booked { background-color: #8b5cf6; color: #ffffff; }
+.status-badge.pogenerated { background-color: #8b5cf6; color: #ffffff; }
+.status-badge.supplierassigned { background-color: #8b5cf6; color: #ffffff; }
+.status-badge.acknowledged { background-color: #a855f7; color: #ffffff; }
+.status-badge.picked { background-color: #f97316; color: #ffffff; }
+.status-badge.lrcopyreceived { background-color: #06b6d4; color: #ffffff; }
+.status-badge.delayed { background-color: #ef4444; color: #ffffff; }
+.status-badge.cancelled { background-color: #6b7280; color: #ffffff; }
 
 /* Requested Order Card (Admin review) */
 .requested-order-card {
@@ -1307,7 +1317,7 @@ body {
 
 .modal-sheet {
   width: 100%;
-  background-color: var(--bg-cream);
+  background-color: #ffffff;
   border-top-left-radius: 28px;
   border-top-right-radius: 28px;
   padding: 24px;
@@ -1439,4 +1449,18 @@ input:checked + .slider:before {
 .stat-card:active, .live-order-card:active, .menu-card:active, .settings-item:active {
   transform: scale(0.98);
   opacity: 0.9;
+}
+
+/* User Management Outlined Actions Hover Effects */
+.btn-outlined-icon-edit:hover {
+  background-color: rgba(224, 86, 36, 0.08) !important;
+}
+.btn-outlined-icon-power-red:hover {
+  background-color: rgba(239, 68, 68, 0.08) !important;
+}
+.btn-outlined-icon-power-green:hover {
+  background-color: rgba(22, 163, 74, 0.08) !important;
+}
+.btn-outlined-icon-key:hover {
+  background-color: rgba(0, 0, 0, 0.05) !important;
 }

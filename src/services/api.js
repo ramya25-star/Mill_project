@@ -80,18 +80,89 @@ const initializeUsers = async () => {
   localStorage.setItem("pms_users", JSON.stringify(defaultUsers));
 };
 
+const validateUserData = (userData, existingUsers) => {
+  if (!userData.name || !userData.name.trim()) {
+    throw new Error("Full name is required.");
+  }
+  const nameRegex = /^[a-zA-Z\s.\-']+$/;
+  if (!nameRegex.test(userData.name.trim())) {
+    throw new Error("Full name contains invalid characters.");
+  }
+
+  if (!userData.email || !userData.email.trim()) {
+    throw new Error("Email address is required.");
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(userData.email.trim())) {
+    throw new Error("Invalid email format.");
+  }
+
+  const duplicateEmail = existingUsers.some(u => u.email?.toLowerCase() === userData.email.toLowerCase() && u.id !== userData.id);
+  if (duplicateEmail) {
+    throw new Error("Email address is already in use by another user.");
+  }
+
+  if (!userData.phone || !userData.phone.trim()) {
+    throw new Error("Phone number is required.");
+  }
+  const phoneRegex = /^(?:\+91)?\d{10}$/;
+  if (!phoneRegex.test(userData.phone.trim())) {
+    throw new Error("Invalid Indian mobile number (must be a 10-digit number, optionally starting with +91).");
+  }
+
+  if (!userData.role) {
+    throw new Error("Role is required.");
+  }
+  if (!userData.department) {
+    throw new Error("Department is required.");
+  }
+};
+
 export const apiService = {
   // ------------------------------------------------
   // MATERIAL REQUESTS / ORDERS API
   // ------------------------------------------------
   async getRequests() {
     const baseUrl = getApiBaseUrl();
+    let requests;
     if (baseUrl) {
       const res = await fetch(`${baseUrl}/requests`);
       if (!res.ok) throw new Error("Failed to fetch requests from live API");
-      return await res.json();
+      requests = await res.json();
+    } else {
+      requests = mockDb.getRequests();
     }
-    return mockDb.getRequests();
+
+    const todayStr = new Date().toLocaleDateString('en-CA'); // Format: yyyy-mm-dd
+    let changed = false;
+    const updated = requests.map(r => {
+      if (r.dueDate && r.status !== "Delivered" && r.status !== "Rejected" && r.status !== "Cancelled" && r.status !== "Delayed") {
+        if (r.dueDate < todayStr) {
+          changed = true;
+          const updatedHistory = [...(r.history || []), {
+            status: "Delayed",
+            updatedBy: "System",
+            role: "Automated",
+            timestamp: new Date().toISOString(),
+            remarks: `Order automatically flagged as Delayed. Due date (${r.dueDate}) has passed.`
+          }];
+          return {
+            ...r,
+            status: "Delayed",
+            history: updatedHistory
+          };
+        }
+      }
+      return r;
+    });
+
+    if (changed) {
+      if (!baseUrl) {
+        mockDb.saveRequests(updated);
+      }
+      return updated;
+    }
+    return requests;
   },
 
   async createRequest(requestData) {
@@ -224,9 +295,40 @@ export const apiService = {
     return mockDb.getUsers();
   },
 
+  async createUser(userData) {
+    await initializeUsers();
+    const users = mockDb.getUsers();
+    
+    validateUserData(userData, users);
+    
+    const exists = users.some(u => u.username.toLowerCase() === userData.username.toLowerCase());
+    if (exists) {
+      throw new Error("Username already exists. Please choose another.");
+    }
+
+    const tempPassword = `alagiri${userData.username.toLowerCase()}`;
+    const hash = await hashPassword(tempPassword);
+    
+    const newUserData = {
+      ...userData,
+      passwordHash: hash,
+      mustChangePassword: true,
+      enabled: true
+    };
+    
+    users.push(newUserData);
+    mockDb.saveUsers(users);
+    return tempPassword;
+  },
+
   async saveUser(userData) {
     await initializeUsers();
     const users = mockDb.getUsers();
+
+    if (userData.role !== "Main Admin") {
+      validateUserData(userData, users);
+    }
+
     const exists = users.find(u => u.id === userData.id);
     let updated;
     if (exists) {
@@ -314,13 +416,78 @@ export const apiService = {
     if (userIndex === -1) {
       throw new Error("User not found");
     }
-    const hash = await hashPassword(newTempPassword);
+    
+    let tempPassword = newTempPassword;
+    if (!tempPassword) {
+      const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+      tempPassword = "";
+      for (let i = 0; i < 12; i++) {
+        tempPassword += charset.charAt(Math.floor(Math.random() * charset.length));
+      }
+    }
+
+    const hash = await hashPassword(tempPassword);
     users[userIndex] = {
       ...users[userIndex],
       passwordHash: hash,
       mustChangePassword: true
     };
     mockDb.saveUsers(users);
-    return true;
+    return tempPassword;
+  },
+
+  async getDepartments() {
+    const saved = localStorage.getItem("pms_departments");
+    if (saved) return JSON.parse(saved);
+    const initial = [
+      { name: "Kraft Mill", disabled: false },
+      { name: "Maintenance", disabled: false },
+      { name: "Production", disabled: false },
+      { name: "Utility", disabled: false },
+      { name: "Logistics", disabled: false },
+      { name: "Executive Office", disabled: false }
+    ];
+    localStorage.setItem("pms_departments", JSON.stringify(initial));
+    return initial;
+  },
+
+  async saveDepartments(depts) {
+    localStorage.setItem("pms_departments", JSON.stringify(depts));
+    return depts;
+  },
+
+  async addDepartment(name) {
+    const depts = await this.getDepartments();
+    const normalized = name.trim();
+    if (depts.some(d => d.name.toLowerCase() === normalized.toLowerCase())) {
+      throw new Error("Department already exists.");
+    }
+    const updated = [...depts, { name: normalized, disabled: false }];
+    await this.saveDepartments(updated);
+    return updated;
+  },
+
+  async renameDepartment(oldName, newName) {
+    const depts = await this.getDepartments();
+    const normalized = newName.trim();
+    if (depts.some(d => d.name.toLowerCase() === normalized.toLowerCase() && d.name.toLowerCase() !== oldName.toLowerCase())) {
+      throw new Error("Target department name already exists.");
+    }
+    const updated = depts.map(d => d.name === oldName ? { ...d, name: normalized } : d);
+    await this.saveDepartments(updated);
+    
+    // Also update all users with this department!
+    const users = mockDb.getUsers();
+    const updatedUsers = users.map(u => u.department === oldName ? { ...u, department: normalized } : u);
+    mockDb.saveUsers(updatedUsers);
+
+    return updated;
+  },
+
+  async toggleDepartmentDisabled(name) {
+    const depts = await this.getDepartments();
+    const updated = depts.map(d => d.name === name ? { ...d, disabled: !d.disabled } : d);
+    await this.saveDepartments(updated);
+    return updated;
   }
 };

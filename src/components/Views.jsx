@@ -1,24 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { apiService, hashPassword } from '../services/api';
+import { CONFIG } from '../config';
 
 // ----------------------------------------------------
 // ICON CONSTANTS (Reusable clean SVG vectors)
 // ----------------------------------------------------
 export const Icons = {
-  Home: () => <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>,
-  Document: () => <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
-  Clock: () => <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
-  Settings: () => <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
-  Back: () => <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="15 18 9 12 15 6"/></svg>,
-  ChevronRight: () => <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="9 18 15 12 9 6"/></svg>,
-  Mic: () => <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>,
-  Close: () => <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
-  Users: () => <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
-  Bell: () => <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
-  Warning: () => <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>,
-  Eye: () => <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
-  EyeSlash: () => <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>,
-  WhatsApp: () => <svg viewBox="0 0 24 24" width="18" height="18" fill="#25D366" style={{ marginRight: '6px' }}><path d="M12.012 2c-5.506 0-9.969 4.463-9.969 9.969 0 1.758.459 3.407 1.264 4.849L2.05 21.95l5.289-1.386a9.92 9.92 0 0 0 4.673 1.173c5.507 0 9.97-4.463 9.97-9.97S17.519 2 12.012 2zm0 17.067c-1.482 0-2.929-.398-4.186-1.155l-.3-.178-3.116.817.831-3.039-.196-.312a8.125 8.125 0 0 1-1.246-4.231c0-4.49 3.653-8.143 8.143-8.143 4.49 0 8.143 3.653 8.143 8.143 0 4.49-3.653 8.143-8.143 8.143zm4.463-6.109c-.245-.122-1.45-.714-1.674-.796-.225-.082-.388-.122-.551.122-.164.245-.633.796-.776.959-.143.163-.286.184-.531.061-.245-.122-1.033-.381-1.968-1.216-.728-.65-1.22-1.452-1.363-1.696-.143-.245-.015-.377.108-.499.11-.11.245-.286.368-.429.122-.143.163-.245.245-.408.082-.163.041-.306-.02-.429-.061-.122-.551-1.327-.756-1.817-.199-.48-.4-.413-.551-.421-.143-.007-.306-.007-.47-.007a.903.903 0 0 0-.653.306c-.225.245-.857.837-.857 2.041 0 1.204.877 2.367.999 2.531.122.163 1.726 2.637 4.183 3.698.585.253 1.042.404 1.397.517.587.186 1.122.16 1.545.097.47-.072 1.45-.592 1.654-1.163.204-.571.204-1.061.143-1.163-.061-.102-.225-.163-.47-.286z"/></svg>
+  Home: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 20} height={p?.size || p?.height || 20} fill="none" stroke="currentColor" strokeWidth="2.2" {...p}><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>,
+  Document: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 20} height={p?.size || p?.height || 20} fill="none" stroke="currentColor" strokeWidth="2.2" {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
+  Clock: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 20} height={p?.size || p?.height || 20} fill="none" stroke="currentColor" strokeWidth="2.2" {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+  Settings: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 20} height={p?.size || p?.height || 20} fill="none" stroke="currentColor" strokeWidth="2.2" {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+  Back: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 24} height={p?.size || p?.height || 24} fill="none" stroke="currentColor" strokeWidth="2.5" {...p}><polyline points="15 18 9 12 15 6"/></svg>,
+  ChevronRight: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 20} height={p?.size || p?.height || 20} fill="none" stroke="currentColor" strokeWidth="2.5" {...p}><polyline points="9 18 15 12 9 6"/></svg>,
+  Mic: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 18} height={p?.size || p?.height || 18} fill="none" stroke="currentColor" strokeWidth="2.5" {...p}><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>,
+  Close: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 24} height={p?.size || p?.height || 24} fill="none" stroke="currentColor" strokeWidth="2.5" {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  Users: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 20} height={p?.size || p?.height || 20} fill="none" stroke="currentColor" strokeWidth="2.2" {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+  Bell: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 20} height={p?.size || p?.height || 20} fill="none" stroke="currentColor" strokeWidth="2.2" {...p}><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
+  Warning: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 48} height={p?.size || p?.height || 48} fill="none" stroke="currentColor" strokeWidth="1.5" {...p}><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>,
+  Eye: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 18} height={p?.size || p?.height || 18} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
+  EyeSlash: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 18} height={p?.size || p?.height || 18} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>,
+  WhatsApp: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 18} height={p?.size || p?.height || 18} fill="#25D366" style={{ marginRight: '6px' }} {...p}><path d="M12.012 2c-5.506 0-9.969 4.463-9.969 9.969 0 1.758.459 3.407 1.264 4.849L2.05 21.95l5.289-1.386a9.92 9.92 0 0 0 4.673 1.173c5.507 0 9.97-4.463 9.97-9.97S17.519 2 12.012 2zm0 17.067c-1.482 0-2.929-.398-4.186-1.155l-.3-.178-3.116.817.831-3.039-.196-.312a8.125 8.125 0 0 1-1.246-4.231c0-4.49 3.653-8.143 8.143-8.143 4.49 0 8.143 3.653 8.143 8.143 0 4.49-3.653 8.143-8.143 8.143zm4.463-6.109c-.245-.122-1.45-.714-1.674-.796-.225-.082-.388-.122-.551.122-.164.245-.633.796-.776.959-.143.163-.286.184-.531.061-.245-.122-1.033-.381-1.968-1.216-.728-.65-1.22-1.452-1.363-1.696-.143-.245-.015-.377.108-.499.11-.11.245-.286.368-.429.122-.143.163-.245.245-.408.082-.163.041-.306-.02-.429-.061-.122-.551-1.327-.756-1.817-.199-.48-.4-.413-.551-.421-.143-.007-.306-.007-.47-.007a.903.903 0 0 0-.653.306c-.225.245-.857.837-.857 2.041 0 1.204.877 2.367.999 2.531.122.163 1.726 2.637 4.183 3.698.585.253 1.042.404 1.397.517.587.186 1.122.16 1.545.097.47-.072 1.45-.592 1.654-1.163.204-.571.204-1.061.143-1.163-.061-.102-.225-.163-.47-.286z"/></svg>,
+  Edit: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 12} height={p?.size || p?.height || 12} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+  Key: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 12} height={p?.size || p?.height || 12} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>,
+  Power: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 12} height={p?.size || p?.height || 12} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>,
+  Check: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 12} height={p?.size || p?.height || 12} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" {...p}><polyline points="20 6 9 17 4 12"/></svg>
 };
 
 // Helper format date
@@ -38,7 +43,7 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
     ? state.requests.filter(r => r.employeeName === user.name) 
     : state.requests;
 
-  const liveOrderStatuses = ["Approved", "Booked", "Acknowledged", "In Transit", "LR Copy Received", "Reached Warehouse"];
+  const liveOrderStatuses = ["Approved", "Booked", "Acknowledged", "Picked", "In Transit", "LR Copy Received", "Reached Warehouse"];
   const totalLiveCount = userRequests.filter(r => liveOrderStatuses.includes(r.status)).length;
   const pendingCount = userRequests.filter(r => r.status === "Pending").length;
   const delayedCount = userRequests.filter(r => ["Delayed", "No Response"].includes(r.status)).length;
@@ -122,6 +127,7 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
         <div className="greeting-user">{welcomeAlert}</div>
       </div>
 
+
       {/* Dynamic Colored Dashboard Metric Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
         <div className="stat-card blue-theme" onClick={() => navigateTo('#live-orders')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', margin: 0, gap: '8px', cursor: 'pointer', padding: '16px', background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: 'var(--border-radius-md)' }}>
@@ -133,10 +139,12 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
         </div>
 
         <div className="stat-card orange-theme" onClick={() => {
-          if (user.role !== 'Employee') {
+          if (user.role === 'Employee') {
+            navigateTo('#pending-orders');
+          } else {
             navigateTo('#requested-orders');
           }
-        }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', margin: 0, gap: '8px', cursor: isEmployee ? 'default' : 'pointer', padding: '16px', background: '#fff7ed', border: '1.5px solid #ffedd5', borderRadius: 'var(--border-radius-md)' }}>
+        }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', margin: 0, gap: '8px', cursor: 'pointer', padding: '16px', background: '#fff7ed', border: '1.5px solid #ffedd5', borderRadius: 'var(--border-radius-md)' }}>
           <span style={{ fontSize: '20px' }}>🟧</span>
           <div style={{ textAlign: 'left' }}>
             <div style={{ fontSize: '24px', fontWeight: '800', lineHeight: '1', color: '#c2410c' }}>{pendingCount}</div>
@@ -146,7 +154,7 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
           </div>
         </div>
 
-        <div className="stat-card red-theme" onClick={() => navigateTo('#live-orders')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', margin: 0, gap: '8px', cursor: 'pointer', padding: '16px', background: '#fef2f2', border: '1.5px solid #fee2e2', borderRadius: 'var(--border-radius-md)' }}>
+        <div className="stat-card red-theme" onClick={() => navigateTo('#live-orders?filter=delayed')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', margin: 0, gap: '8px', cursor: 'pointer', padding: '16px', background: '#fef2f2', border: '1.5px solid #fee2e2', borderRadius: 'var(--border-radius-md)' }}>
           <span style={{ fontSize: '20px' }}>🟥</span>
           <div style={{ textAlign: 'left' }}>
             <div style={{ fontSize: '24px', fontWeight: '800', lineHeight: '1', color: '#b91c1c' }}>{delayedCount}</div>
@@ -207,21 +215,275 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
 // ----------------------------------------------------
 // 2. CREATE REQUEST VIEW COMPONENT
 // ----------------------------------------------------
-export function CreateRequestView({ state, navigateTo, addNotification }) {
+export function CreateRequestView({ state, navigateTo, addNotification, openModal, closeModal, setModalContent }) {
   const [productName, setProductName] = useState("");
   const [qty, setQty] = useState("");
-  const [units, setUnits] = useState("pcs");
+  const [units, setUnits] = useState("Pieces");
   const [suggestedSupplier, setSuggestedSupplier] = useState("");
+  const [suggestedSupplierPhone, setSuggestedSupplierPhone] = useState("");
+  const [suggestedSupplierEmail, setSuggestedSupplierEmail] = useState("");
+  const [suggestedSupplierRemarks, setSuggestedSupplierRemarks] = useState("");
   const [billTo, setBillTo] = useState(state.branding.billingLocations[0] || "");
   const [description, setDescription] = useState("");
   const [listening, setListening] = useState(false);
+  const [errors, setErrors] = useState({});
+
+  const validateField = (field, value) => {
+    let err = "";
+    if (field === "productName") {
+      if (!value.trim()) {
+        err = "Product Name is required.";
+      }
+    } else if (field === "qty") {
+      const parsed = parseFloat(value);
+      if (!value) {
+        err = "Quantity is required.";
+      } else if (isNaN(parsed) || parsed <= 0) {
+        err = "Quantity must be a positive number.";
+      }
+    } else if (field === "units") {
+      if (!value) {
+        err = "Units is required.";
+      }
+    } else if (field === "suggestedSupplierEmail") {
+      if (value.trim()) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(value.trim())) {
+          err = "Invalid email format.";
+        }
+      }
+    } else if (field === "suggestedSupplierPhone") {
+      if (value.trim()) {
+        let stripped = value.trim();
+        if (stripped.startsWith("+91")) {
+          stripped = stripped.substring(3);
+        } else if (stripped.startsWith("+")) {
+          stripped = stripped.substring(1);
+        }
+        if (!/^\d+$/.test(stripped)) {
+          err = "Phone number must contain numbers only.";
+        }
+      }
+    }
+    setErrors(prev => {
+      const next = { ...prev };
+      if (err) next[field] = err;
+      else delete next[field];
+      return next;
+    });
+  };
+
+  // New Date, Priority and Document attachments states
+  const [dueDate, setDueDate] = useState("");
+  const [priority, setPriority] = useState("Non-Critical");
+  const [attachedFile, setAttachedFile] = useState(null);
+  const [attachedFileName, setAttachedFileName] = useState("");
+
+  // Live Webcam state variables
+  const [showWebcamModal, setShowWebcamModal] = useState(false);
+  const [webcamStream, setWebcamStream] = useState(null);
+
+  useEffect(() => {
+    if (showWebcamModal && webcamStream) {
+      const timer = setTimeout(() => {
+        const video = document.getElementById("webcam-video-feed");
+        if (video) {
+          video.srcObject = webcamStream;
+          video.play().catch(e => console.error("Webcam play error:", e));
+        }
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [showWebcamModal, webcamStream]);
+
+  const startWebcam = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+      });
+      setWebcamStream(stream);
+      setShowWebcamModal(true);
+      state.showToast("Camera Active", "Live camera initialized successfully.", "success");
+    } catch (err) {
+      console.warn("Webcam blocked or unavailable, falling back to file picker:", err);
+      // Fallback: click standard camera file input
+      const fallback = document.getElementById("camera-fallback-input");
+      if (fallback) fallback.click();
+    }
+  };
+
+  const stopWebcam = () => {
+    if (webcamStream) {
+      webcamStream.getTracks().forEach(track => track.stop());
+      setWebcamStream(null);
+    }
+    setShowWebcamModal(false);
+  };
+
+  const capturePhoto = () => {
+    const video = document.getElementById("webcam-video-feed");
+    if (!video) return;
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 800;
+      canvas.height = video.videoHeight || 600;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      setAttachedFile(dataUrl);
+      setAttachedFileName(`Camera_Capture_${Date.now()}.jpg`);
+      state.showToast("Capture Success", "Document screenshot captured successfully.", "success");
+      stopWebcam();
+    } catch (err) {
+      state.showToast("Capture Error", "Failed to capture snapshot.", "success");
+    }
+  };
+
+  const compressAndReadImage = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+          const MAX_WIDTH = 800;
+          const MAX_HEIGHT = 800;
+          let width = img.width;
+          let height = img.height;
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedBase64 = canvas.toDataURL("image/jpeg", 0.7);
+          resolve(compressedBase64);
+        };
+        img.onerror = (err) => reject(err);
+        img.src = e.target.result;
+      };
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleCameraCapture = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const compressed = await compressAndReadImage(file);
+      setAttachedFile(compressed);
+      setAttachedFileName(file.name || `Camera_${Date.now()}.jpg`);
+      state.showToast("Camera Success", "Document photo captured successfully.", "success");
+    } catch (err) {
+      state.showToast("Camera Error", "Failed to capture document photo.", "success");
+    }
+  };
+
+  const handleImageFileSelect = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const allowedExtensions = ["pdf", "xls", "xlsx", "doc", "docx", "jpg", "jpeg", "png"];
+    const fileExt = file.name.split('.').pop().toLowerCase();
+    if (!allowedExtensions.includes(fileExt)) {
+      state.showToast("Security Block", "Unauthorized file format. Only PDF, Word, Excel, and image formats are allowed.", "success");
+      e.target.value = ""; // Clear input
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAttachedFile(reader.result);
+      setAttachedFileName(file.name);
+      state.showToast("Upload Success", `${file.name} attached successfully.`, "success");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleBillToChange = (val) => {
+    if (val === "ADD_NEW") {
+      let newLoc = "";
+      setModalContent(
+        <div style={{ textAlign: 'left' }}>
+          <p style={{ fontSize: '13px', marginBottom: '12px' }}>Enter the name of the new delivery/billing location:</p>
+          <div className="form-group">
+            <input 
+              type="text" 
+              className="form-control" 
+              placeholder="e.g. Warehouse 3 - Chennai" 
+              onChange={e => { newLoc = e.target.value; }} 
+              style={{ cursor: 'text' }}
+            />
+          </div>
+          <button 
+            className="btn-orange" 
+            onClick={() => {
+              if (newLoc.trim()) {
+                const updatedLocations = [...state.branding.billingLocations, newLoc.trim()];
+                state.updateBranding({
+                  ...state.branding,
+                  billingLocations: updatedLocations
+                });
+                setBillTo(newLoc.trim());
+              }
+              closeModal();
+            }} 
+            style={{ width: '100%', cursor: 'pointer' }}
+          >
+            Add Location
+          </button>
+        </div>,
+        "Add New Location"
+      );
+      openModal();
+    } else {
+      setBillTo(val);
+    }
+  };
   const user = state.currentUser;
   const isEmployee = user.role === "Employee";
 
   const handleSubmit = async () => {
+    const newErrors = {};
+    if (!productName.trim()) newErrors.productName = "Product Name is required.";
     const quantity = parseFloat(qty);
-    if (!productName || isNaN(quantity) || quantity <= 0 || !units) {
-      alert("Please fill in Product Name, Qty, and Units.");
+    if (!qty) newErrors.qty = "Quantity is required.";
+    else if (isNaN(quantity) || quantity <= 0) newErrors.qty = "Quantity must be a positive number.";
+    if (!units) newErrors.units = "Units is required.";
+
+    if (isEmployee) {
+      if (suggestedSupplierEmail.trim()) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(suggestedSupplierEmail.trim())) {
+          newErrors.suggestedSupplierEmail = "Invalid email format.";
+        }
+      }
+      if (suggestedSupplierPhone.trim()) {
+        let stripped = suggestedSupplierPhone.trim();
+        if (stripped.startsWith("+91")) {
+          stripped = stripped.substring(3);
+        } else if (stripped.startsWith("+")) {
+          stripped = stripped.substring(1);
+        }
+        if (!/^\d+$/.test(stripped)) {
+          newErrors.suggestedSupplierPhone = "Phone number must contain numbers only.";
+        }
+      }
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      state.showToast("Validation Error", "Please resolve all validation errors before submitting.", "success");
       return;
     }
 
@@ -230,15 +492,24 @@ export function CreateRequestView({ state, navigateTo, addNotification }) {
     const newReq = {
       id: reqId,
       employeeName: user.name,
-      department: user.department,
+      department: user.department || "General",
       date: new Date().toISOString(),
+      createdDate: new Date().toLocaleDateString('en-GB'),
+      createdTime: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
       productName,
       qty: quantity,
       units,
-      suggestedSupplier: isEmployee ? "" : suggestedSupplier,
+      suggestedSupplier: suggestedSupplier || "",
+      suggestedSupplierPhone: isEmployee ? suggestedSupplierPhone : "",
+      suggestedSupplierEmail: isEmployee ? suggestedSupplierEmail : "",
+      suggestedSupplierRemarks: isEmployee ? suggestedSupplierRemarks : "",
       billTo,
       description,
       status: "Pending",
+      dueDate: dueDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      priority: priority || "Medium",
+      image: attachedFile || null,
+      imageName: attachedFileName || "",
       supplierId: "",
       poNumber: "",
       poDate: "",
@@ -248,7 +519,8 @@ export function CreateRequestView({ state, navigateTo, addNotification }) {
           status: "Pending",
           updatedBy: user.name,
           role: user.role,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          remarks: "Initial request placed."
         }
       ]
     };
@@ -261,7 +533,7 @@ export function CreateRequestView({ state, navigateTo, addNotification }) {
     const timeStr = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     addNotification(
       "New Request Created",
-      `Employee: ${user.name}\nDept: ${user.department}\nTime: ${timeStr}\nPriority: Normal\nRequest ID: ${reqId}`,
+      `Employee: ${user.name}\nDept: ${user.department || "General"}\nTime: ${timeStr}\nPriority: ${priority}\nRequest ID: ${reqId}`,
       "Admin"
     );
 
@@ -325,22 +597,55 @@ export function CreateRequestView({ state, navigateTo, addNotification }) {
       <div style={{ paddingTop: '10px' }}>
         <div className="form-group">
           <label>Product name</label>
-          <input type="text" className="form-control" placeholder="e.g. chain wheel" value={productName} onChange={e => setProductName(e.target.value)} />
+          <input type="text" className="form-control" placeholder="e.g. chain wheel" value={productName} onChange={e => { setProductName(e.target.value); validateField("productName", e.target.value); }} style={{ border: errors.productName ? '1.5px solid var(--status-red)' : '1px solid var(--border-color)', cursor: 'text' }} />
+          {errors.productName && <div style={{ color: 'var(--status-red)', fontSize: '11px', marginTop: '4px', textAlign: 'left' }}>{errors.productName}</div>}
         </div>
 
         <div className="form-row">
           <div className="form-group">
             <label>Qty</label>
-            <input type="number" className="form-control" placeholder="10" value={qty} onChange={e => setQty(e.target.value)} />
+            <input type="number" className="form-control" placeholder="10" value={qty} onChange={e => { setQty(e.target.value); validateField("qty", e.target.value); }} style={{ border: errors.qty ? '1.5px solid var(--status-red)' : '1px solid var(--border-color)', cursor: 'text' }} />
+            {errors.qty && <div style={{ color: 'var(--status-red)', fontSize: '11px', marginTop: '4px', textAlign: 'left' }}>{errors.qty}</div>}
           </div>
           <div className="form-group">
             <label>Units</label>
-            <input type="text" className="form-control" placeholder="pcs" list="units-list" value={units} onChange={e => setUnits(e.target.value)} />
+            <select className="form-control" value={units} onChange={e => { setUnits(e.target.value); validateField("units", e.target.value); }} style={{ cursor: 'pointer', border: errors.units ? '1.5px solid var(--status-red)' : '1px solid var(--border-color)' }}>
+              <option value="Pieces">Pieces</option>
+              <option value="Kg">Kg</option>
+              <option value="Litre">Litre</option>
+              <option value="Box">Box</option>
+              <option value="Meter">Meter</option>
+              <option value="Nos">Nos</option>
+            </select>
+            {errors.units && <div style={{ color: 'var(--status-red)', fontSize: '11px', marginTop: '4px', textAlign: 'left' }}>{errors.units}</div>}
           </div>
         </div>
 
-        {/* Suggest supplier is hidden completely for employees */}
-        {!isEmployee && (
+        {isEmployee ? (
+          <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-md)', padding: '12px', marginBottom: '16px', background: 'var(--card-bg)', textAlign: 'left' }}>
+            <h4 style={{ fontSize: '12px', fontWeight: '800', marginBottom: '10px', textTransform: 'uppercase', color: 'var(--primary-orange)', letterSpacing: '0.5px' }}>Suggest Supplier (Optional)</h4>
+            <div className="form-group">
+              <label>Supplier Name</label>
+              <input type="text" className="form-control" placeholder="e.g. AB Company" value={suggestedSupplier} onChange={e => setSuggestedSupplier(e.target.value)} />
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Phone</label>
+                <input type="text" className="form-control" placeholder="e.g. +91 9988776655" value={suggestedSupplierPhone} onChange={e => { setSuggestedSupplierPhone(e.target.value); validateField("suggestedSupplierPhone", e.target.value); }} style={{ border: errors.suggestedSupplierPhone ? '1.5px solid var(--status-red)' : '1px solid var(--border-color)', cursor: 'text' }} />
+                {errors.suggestedSupplierPhone && <div style={{ color: 'var(--status-red)', fontSize: '11px', marginTop: '4px', textAlign: 'left' }}>{errors.suggestedSupplierPhone}</div>}
+              </div>
+              <div className="form-group">
+                <label>Email</label>
+                <input type="email" className="form-control" placeholder="e.g. sales@abco.com" value={suggestedSupplierEmail} onChange={e => { setSuggestedSupplierEmail(e.target.value); validateField("suggestedSupplierEmail", e.target.value); }} style={{ border: errors.suggestedSupplierEmail ? '1.5px solid var(--status-red)' : '1px solid var(--border-color)', cursor: 'text' }} />
+                {errors.suggestedSupplierEmail && <div style={{ color: 'var(--status-red)', fontSize: '11px', marginTop: '4px', textAlign: 'left' }}>{errors.suggestedSupplierEmail}</div>}
+              </div>
+            </div>
+            <div className="form-group" style={{ marginBottom: 0, marginTop: '8px' }}>
+              <label>Remarks</label>
+              <input type="text" className="form-control" placeholder="e.g. Recommended for pulper parts" value={suggestedSupplierRemarks} onChange={e => setSuggestedSupplierRemarks(e.target.value)} />
+            </div>
+          </div>
+        ) : (
           <div className="form-group">
             <label>Suggest supplier</label>
             <input type="text" className="form-control" placeholder="e.g. AB company" value={suggestedSupplier} onChange={e => setSuggestedSupplier(e.target.value)} />
@@ -349,8 +654,9 @@ export function CreateRequestView({ state, navigateTo, addNotification }) {
 
         <div className="form-group">
           <label>Bill to</label>
-          <select className="form-control" value={billTo} onChange={e => setBillTo(e.target.value)}>
+          <select className="form-control" value={billTo} onChange={e => handleBillToChange(e.target.value)} style={{ cursor: 'pointer' }}>
             {state.branding.billingLocations.map(loc => <option key={loc} value={loc}>{loc}</option>)}
+            <option value="ADD_NEW">+ (Add New Location)</option>
           </select>
         </div>
 
@@ -364,9 +670,212 @@ export function CreateRequestView({ state, navigateTo, addNotification }) {
           </div>
         </div>
 
+        <div className="form-row" style={{ marginTop: '16px' }}>
+          <div className="form-group">
+            <label>Due Date</label>
+            <input type="date" className="form-control" value={dueDate} onChange={e => setDueDate(e.target.value)} style={{ cursor: 'pointer' }} />
+          </div>
+          <div className="form-group">
+            <label>Importance</label>
+            <select className="form-control" value={priority} onChange={e => setPriority(e.target.value)} style={{ cursor: 'pointer' }}>
+              <option value="Non-Critical">Non-Critical</option>
+              <option value="Critical">Critical</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="form-group" style={{ marginTop: '16px', textAlign: 'left' }}>
+          <label>Attachment Document</label>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <button 
+              type="button"
+              className="btn-outlined-icon-edit" 
+              onClick={startWebcam}
+              style={{ backgroundColor: 'transparent', color: 'var(--primary-orange)', border: '1px solid var(--primary-orange)', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', height: '36px', boxSizing: 'border-box' }}
+            >
+              📸 Scan Document
+            </button>
+            <input id="camera-fallback-input" type="file" accept="image/*" capture="environment" onChange={handleCameraCapture} style={{ display: 'none' }} />
+            
+            <label 
+              className="btn-outlined-icon-key" 
+              style={{ backgroundColor: 'transparent', color: 'var(--text-main)', border: '1px solid var(--text-main)', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', height: '36px', boxSizing: 'border-box' }}
+            >
+              📁 Upload Document
+              <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/*" onChange={handleImageFileSelect} style={{ display: 'none' }} />
+            </label>
+          </div>
+
+          {attachedFile && (
+            <div style={{ marginTop: '12px', display: 'inline-flex', alignItems: 'center', gap: '8px', background: '#f9f9f8', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', position: 'relative' }}>
+              <span style={{ fontSize: '20px' }}>📄</span>
+              <span style={{ fontSize: '12px', fontWeight: 'bold', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{attachedFileName || "Attached Document"}</span>
+              <button 
+                type="button" 
+                onClick={() => { setAttachedFile(null); setAttachedFileName(""); }} 
+                style={{ marginLeft: '10px', width: '20px', height: '20px', borderRadius: '50%', backgroundColor: 'var(--status-red)', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold', padding: 0 }}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+        </div>
+
         <button className="btn-dark" onClick={handleSubmit} style={{ marginTop: '10px', cursor: 'pointer' }}>
           Place Request
         </button>
+      </div>
+
+      {showWebcamModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.92)', zIndex: 9999, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '24px', boxSizing: 'border-box', fontFamily: 'var(--font-family)' }}>
+          {/* Header */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h4 style={{ color: '#fff', margin: 0, fontSize: '16px', fontWeight: '800', letterSpacing: '0.3px' }}>Scan Document</h4>
+            <button onClick={stopWebcam} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer', padding: '4px', lineHeight: '1' }}>✕</button>
+          </div>
+
+          {/* Video Container with overlay document frame */}
+          <div style={{ position: 'relative', flex: 1, margin: '20px 0', borderRadius: '16px', overflow: 'hidden', backgroundColor: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <video id="webcam-video-feed" playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }}></video>
+            
+            {/* Document scanning overlay frame */}
+            <div style={{ position: 'absolute', inset: '10%', border: '2.5px dashed var(--primary-orange)', borderRadius: '12px', pointerEvents: 'none', boxShadow: '0 0 0 9999px rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1.2px', textAlign: 'center', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
+                Align Document in Frame
+              </div>
+            </div>
+          </div>
+
+          {/* Shutter controls */}
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', paddingBottom: '10px' }}>
+            <button 
+              onClick={capturePhoto} 
+              style={{
+                width: '68px',
+                height: '68px',
+                borderRadius: '50%',
+                backgroundColor: '#ffffff',
+                border: '4px solid var(--primary-orange)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+                padding: 0
+              }}
+              title="Capture Scan"
+            >
+              <div style={{ width: '50px', height: '50px', borderRadius: '50%', backgroundColor: 'var(--primary-orange)', transition: 'transform 0.1s', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ fontSize: '20px' }}>📷</span>
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ----------------------------------------------------
+// SUPPLIER PICKER SUB-COMPONENT (WITH SEARCH & HIGHLIGHTING)
+// ----------------------------------------------------
+export function SupplierPicker({ suppliers, currentSupplierId, onSelect }) {
+  const [query, setQuery] = useState("");
+
+  const getSortedSuppliers = () => {
+    return [...suppliers].sort((a, b) => {
+      const aRating = a.rating || 0;
+      const bRating = b.rating || 0;
+      if (bRating !== aRating) return bRating - aRating;
+
+      const getTimestamp = (id) => {
+        if (!id) return 0;
+        const parts = id.split('-');
+        if (parts.length > 1) {
+          const ts = parseInt(parts[1]);
+          if (!isNaN(ts) && ts > 100000) return ts;
+        }
+        return 0;
+      };
+      const aTs = getTimestamp(a.id);
+      const bTs = getTimestamp(b.id);
+      if (aTs !== bTs) return bTs - aTs;
+      return a.companyName.localeCompare(b.companyName);
+    });
+  };
+
+  const sorted = getSortedSuppliers();
+  const newestSupplier = sorted.find(s => {
+    if (!s.id) return false;
+    const parts = s.id.split('-');
+    return parts.length > 1 && !isNaN(parseInt(parts[1])) && parseInt(parts[1]) > 100000;
+  }) || sorted[0];
+
+  const filtered = sorted.filter(sup => 
+    sup.companyName.toLowerCase().includes(query.toLowerCase()) ||
+    (sup.products && sup.products.toLowerCase().includes(query.toLowerCase()))
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '4px 0' }}>
+      <div className="form-group" style={{ marginBottom: '8px' }}>
+        <input 
+          type="text" 
+          placeholder="Search supplier by name or products..." 
+          className="form-control"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          style={{ cursor: 'text' }}
+          autoFocus
+        />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '300px', overflowY: 'auto', margin: '0 -24px', padding: '4px 24px' }}>
+        {filtered.length === 0 ? (
+          <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }}>
+            No matching suppliers found.
+          </div>
+        ) : (
+          filtered.map(sup => {
+            const isNewest = newestSupplier && newestSupplier.id === sup.id;
+            return (
+              <div 
+                key={sup.id} 
+                className="live-order-card" 
+                style={{ 
+                  padding: '12px', 
+                  cursor: 'pointer', 
+                  margin: '4px 0', 
+                  border: currentSupplierId === sup.id ? '2.5px solid var(--primary-orange)' : '1.5px solid var(--border-color)', 
+                  borderRadius: '8px', 
+                  textAlign: 'left' 
+                }} 
+                onClick={() => onSelect(sup.id)}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontWeight: '700', fontSize: '14px', color: 'var(--text-main)' }}>{sup.companyName}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ display: 'inline-flex' }}>
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <span key={i} style={{ color: i < (sup.rating || 5) ? '#fbbf24' : '#d1d5db', fontSize: '13px' }}>★</span>
+                      ))}
+                    </div>
+                    {isNewest && (
+                      <span style={{ background: '#dcfce7', color: '#15803d', fontSize: '10px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '4px', border: '1px solid #bbf7d0' }}>
+                        Recently Added
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Contact: {sup.contactPerson} | WA: {sup.whatsappNumber}</div>
+                {sup.products && (
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', background: '#f9f9f8', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                    Products: {sup.products}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );
@@ -410,68 +919,156 @@ export function RequestedOrdersView({ state, navigateTo, addNotification, openMo
     }));
   };
 
-  const handleApprove = async (id) => {
-    const cardData = formData[id];
-    if (!cardData || !cardData.productName || !cardData.qty || !cardData.supplierId) {
-      alert("Please ensure product name, quantity and supplier are filled.");
-      return;
+  const handleApprovalBillToChange = (reqId, val) => {
+    if (val === "ADD_NEW") {
+      let newLoc = "";
+      setModalContent(
+        <div style={{ textAlign: 'left' }}>
+          <p style={{ fontSize: '13px', marginBottom: '12px' }}>Enter the name of the new delivery/billing location:</p>
+          <div className="form-group">
+            <input 
+              type="text" 
+              className="form-control" 
+              placeholder="e.g. Warehouse 3 - Chennai" 
+              onChange={e => { newLoc = e.target.value; }} 
+              style={{ cursor: 'text' }}
+            />
+          </div>
+          <button 
+            className="btn-orange" 
+            onClick={() => {
+              if (newLoc.trim()) {
+                const updatedLocations = [...state.branding.billingLocations, newLoc.trim()];
+                state.updateBranding({
+                  ...state.branding,
+                  billingLocations: updatedLocations
+                });
+                updateCardField(reqId, "billTo", newLoc.trim());
+              }
+              closeModal();
+            }} 
+            style={{ width: '100%', cursor: 'pointer' }}
+          >
+            Add Location
+          </button>
+        </div>,
+        "Add New Location"
+      );
+      openModal();
+    } else {
+      updateCardField(reqId, "billTo", val);
     }
-
-    const req = state.requests.find(r => r.id === id);
-    const user = state.currentUser;
-    const updatedHistory = [...req.history, {
-      status: "Approved",
-      updatedBy: user.name,
-      role: user.role,
-      timestamp: new Date().toISOString()
-    }];
-
-    const updatedReq = {
-      ...req,
-      productName: cardData.productName,
-      qty: parseFloat(cardData.qty),
-      units: cardData.units,
-      description: cardData.description,
-      billTo: cardData.billTo,
-      supplierId: cardData.supplierId,
-      poNumber: `PO-${new Date().getFullYear()}-${100 + state.requests.length}`,
-      poDate: new Date().toISOString(),
-      status: "Approved",
-      history: updatedHistory
-    };
-
-    const saved = await apiService.updateRequest(id, updatedReq);
-    state.setRequests(state.requests.map(r => r.id === id ? saved : r));
-
-    state.logEvent("Approved Request & Edited", "Pending", "Approved", `Admin approved ${id}. Assigned Supplier ID: ${cardData.supplierId}`);
-    addNotification("Request Approved", `${cardData.productName} requested by ${req.employeeName} has been approved.`, "Both");
-
-    navigateTo(`#po-preview?id=${id}`);
   };
 
-  const handleReject = async (id) => {
-    const reason = prompt("Rejection Reason:") || "Denied by management.";
-    const req = state.requests.find(r => r.id === id);
-    const user = state.currentUser;
-    
-    const updatedReq = {
-      ...req,
-      status: "Rejected",
-      history: [...req.history, {
-        status: "Rejected",
+  const handleApprove = async (id) => {
+    try {
+      const cardData = formData[id];
+      if (!cardData || !cardData.productName || !cardData.qty || !cardData.supplierId || !cardData.billTo) {
+        state.showToast("Validation Error", "Please ensure product name, quantity, supplier, and billing location are filled.", "success");
+        return;
+      }
+
+      const req = state.requests.find(r => r.id === id);
+      if (!req) {
+        state.showToast("Not Found", "Request not found in database.", "success");
+        return;
+      }
+
+      const user = state.currentUser;
+      const updatedHistory = [...req.history, {
+        status: "Approved",
         updatedBy: user.name,
         role: user.role,
         timestamp: new Date().toISOString(),
-        remarks: reason
-      }]
-    };
+        remarks: "Approved and PO generated."
+      }];
 
-    const saved = await apiService.updateRequest(id, updatedReq);
-    state.setRequests(state.requests.map(r => r.id === id ? saved : r));
+      const updatedReq = {
+        ...req,
+        productName: cardData.productName,
+        qty: parseFloat(cardData.qty),
+        units: cardData.units,
+        description: cardData.description,
+        billTo: cardData.billTo,
+        supplierId: cardData.supplierId,
+        poNumber: `PO-${new Date().getFullYear()}-${100 + state.requests.length}`,
+        poDate: new Date().toISOString(),
+        status: "Approved",
+        history: updatedHistory
+      };
 
-    state.logEvent("Rejected Request", "Pending", "Rejected", `Admin rejected ${id}. Reason: ${reason}`);
-    addNotification("Request Rejected", `Request ${id} rejected. Reason: ${reason}`, "Both");
-    state.triggerWebhook("request.rejected", saved);
+      const saved = await apiService.updateRequest(id, updatedReq);
+      if (!saved) {
+        throw new Error("Failed to update database. API returned empty response.");
+      }
+      state.setRequests(state.requests.map(r => r.id === id ? saved : r));
+
+      state.logEvent("Approved Request & Edited", "Pending", "Approved", `Admin approved ${id}. Assigned Supplier ID: ${cardData.supplierId}`);
+      addNotification("Request Approved", `${cardData.productName} requested by ${req.employeeName} has been approved.`, "Both");
+
+      navigateTo(`#po-preview?id=${id}`);
+    } catch (err) {
+      setModalContent(
+        <div style={{ textAlign: 'center' }}>
+          <p style={{ color: 'var(--status-red)', fontWeight: 'bold' }}>PO Approval Failure</p>
+          <p>{err.message || "An unexpected error occurred during PO generation."}</p>
+          <button className="btn-dark" onClick={closeModal} style={{ cursor: 'pointer' }}>Close</button>
+        </div>,
+        "Execution Error"
+      );
+      openModal();
+    }
+  };
+
+  const handleReject = (id) => {
+    let reason = "Denied by management.";
+    setModalContent(
+      <div style={{ textAlign: 'left' }}>
+        <p style={{ fontSize: '13px', marginBottom: '12px' }}>Enter rejection reason:</p>
+        <div className="form-group">
+          <input 
+            type="text" 
+            className="form-control" 
+            defaultValue={reason} 
+            onChange={e => { reason = e.target.value; }} 
+            style={{ cursor: 'text' }}
+          />
+        </div>
+        <button 
+          className="btn-orange" 
+          onClick={async () => {
+            const req = state.requests.find(r => r.id === id);
+            const user = state.currentUser;
+            
+            const updatedReq = {
+              ...req,
+              status: "Rejected",
+              history: [...req.history, {
+                status: "Rejected",
+                updatedBy: user.name,
+                role: user.role,
+                timestamp: new Date().toISOString(),
+                remarks: reason || "Denied by management."
+              }]
+            };
+
+            const saved = await apiService.updateRequest(id, updatedReq);
+            state.setRequests(state.requests.map(r => r.id === id ? saved : r));
+
+            state.logEvent("Rejected Request", "Pending", "Rejected", `Admin rejected ${id}. Reason: ${reason}`);
+            addNotification("Request Rejected", `Request ${id} rejected. Reason: ${reason}`, "Both");
+            state.triggerWebhook("request.rejected", saved);
+            
+            closeModal();
+          }} 
+          style={{ width: '100%', cursor: 'pointer' }}
+        >
+          Confirm Reject
+        </button>
+      </div>,
+      "Reject Request"
+    );
+    openModal();
   };
 
   const openSupplierPicker = (requestId) => {
@@ -481,17 +1078,11 @@ export function RequestedOrdersView({ state, navigateTo, addNotification, openMo
     };
 
     setModalContent(
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '350px', overflowY: 'auto', margin: '-10px -24px 0 -24px', padding: '10px 24px' }}>
-        {state.suppliers.map(sup => (
-          <div key={sup.id} className="live-order-card" style={{ padding: '12px', cursor: 'pointer', margin: '4px 0', border: formData[requestId]?.supplierId === sup.id ? '2.5px solid var(--primary-orange)' : '1.5px solid var(--border-color)', borderRadius: '8px', textAlign: 'left' }} onClick={() => handleSelect(sup.id)}>
-            <div style={{ fontWeight: '700', fontSize: '14px', color: 'var(--text-main)' }}>{sup.companyName}</div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Contact: {sup.contactPerson} | WA: {sup.whatsappNumber}</div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', background: 'var(--bg-cream)', padding: '4px 8px', borderRadius: '4px' }}>
-              Products: {sup.products}
-            </div>
-          </div>
-        ))}
-      </div>,
+      <SupplierPicker 
+        suppliers={state.suppliers} 
+        currentSupplierId={formData[requestId]?.supplierId} 
+        onSelect={handleSelect} 
+      />,
       "Select Supplier"
     );
     openModal();
@@ -549,10 +1140,21 @@ export function RequestedOrdersView({ state, navigateTo, addNotification, openMo
 
                 <div className="form-group">
                   <label>Bill to</label>
-                  <select className="form-control" value={current.billTo} onChange={e => updateCardField(req.id, "billTo", e.target.value)}>
+                  <select className="form-control" value={current.billTo} onChange={e => handleApprovalBillToChange(req.id, e.target.value)} style={{ cursor: 'pointer' }}>
                     {state.branding.billingLocations.map(loc => <option key={loc} value={loc}>{loc}</option>)}
+                    <option value="ADD_NEW">+ (Add New Location)</option>
                   </select>
                 </div>
+
+                {req.suggestedSupplier && (
+                  <div style={{ background: 'var(--bg-cream)', padding: '10px', borderRadius: '6px', marginBottom: '12px', fontSize: '11px', textAlign: 'left', border: '1px solid var(--border-color)' }}>
+                    <div style={{ fontWeight: '800', color: 'var(--primary-orange)', marginBottom: '4px' }}>Suggested Supplier:</div>
+                    <div><b>Name:</b> {req.suggestedSupplier}</div>
+                    {req.suggestedSupplierPhone && <div><b>Phone:</b> {req.suggestedSupplierPhone}</div>}
+                    {req.suggestedSupplierEmail && <div><b>Email:</b> {req.suggestedSupplierEmail}</div>}
+                    {req.suggestedSupplierRemarks && <div style={{ marginTop: '2px', fontStyle: 'italic', color: 'var(--text-muted)' }}><b>Remarks:</b> "{req.suggestedSupplierRemarks}"</div>}
+                  </div>
+                )}
 
                 {/* Mobile-friendly Supplier selection button instead of dropdown */}
                 <div className="form-group">
@@ -600,13 +1202,13 @@ Delivery Location: *${req.billTo}*
 *Instructions:* Please acknowledge receipt of this PO. Upload LR Copy once shipment is sent.`;
 
   const handleShareWhatsApp = async () => {
-    const url = `https://api.whatsapp.com/send?phone=${supplier.whatsappNumber}&text=${encodeURIComponent(formattedMsg)}`;
+    const url = `https://api.whatsapp.com/send?phone=${supplier.whatsappNumber || ""}&text=${encodeURIComponent(formattedMsg)}`;
     
     // Set status to Booked
     const updatedHistory = [...req.history, {
       status: "Booked",
-      updatedBy: state.users.admin.name,
-      role: "Admin",
+      updatedBy: state.currentUser.name,
+      role: state.currentUser.role || "Admin",
       timestamp: new Date().toISOString(),
       remarks: "PO dispatched to WhatsApp."
     }];
@@ -614,7 +1216,7 @@ Delivery Location: *${req.billTo}*
     const saved = await apiService.updateRequest(requestId, updatedReq);
     state.setRequests(state.requests.map(r => r.id === requestId ? saved : r));
 
-    state.logEvent("WhatsApp Message Sent", "Approved", "Booked", `Sent PO via WhatsApp to ${supplier.companyName}`);
+    state.logEvent("WhatsApp Message Sent", "Approved", "Booked", `Sent PO via WhatsApp to ${supplier.companyName || "supplier"}`);
     addNotification("Order Updated", `Order ${requestId} status changed to Booked`, "Both");
     state.triggerWebhook("status.changed", saved);
 
@@ -626,12 +1228,12 @@ Delivery Location: *${req.billTo}*
   };
 
   const handleShareMail = async () => {
-    const url = `mailto:${supplier.email}?subject=Purchase Order Confirmation&body=${encodeURIComponent(formattedMsg)}`;
+    const url = `mailto:${supplier.email || ""}?subject=Purchase Order Confirmation&body=${encodeURIComponent(formattedMsg)}`;
 
     const updatedHistory = [...req.history, {
       status: "Booked",
-      updatedBy: state.users.admin.name,
-      role: "Admin",
+      updatedBy: state.currentUser.name,
+      role: state.currentUser.role || "Admin",
       timestamp: new Date().toISOString(),
       remarks: "PO dispatched via email."
     }];
@@ -639,7 +1241,7 @@ Delivery Location: *${req.billTo}*
     const saved = await apiService.updateRequest(requestId, updatedReq);
     state.setRequests(state.requests.map(r => r.id === requestId ? saved : r));
 
-    state.logEvent("Email PO Sent", "Approved", "Booked", `Sent PO via email to ${supplier.email}`);
+    state.logEvent("Email PO Sent", "Approved", "Booked", `Sent PO via email to ${supplier.email || "supplier"}`);
     addNotification("Order Updated", `Order ${requestId} status changed to Booked`, "Both");
 
     window.open(url, '_blank');
@@ -649,8 +1251,8 @@ Delivery Location: *${req.billTo}*
   const handleShareBoth = async () => {
     const updatedHistory = [...req.history, {
       status: "Booked",
-      updatedBy: state.users.admin.name,
-      role: "Admin",
+      updatedBy: state.currentUser.name,
+      role: state.currentUser.role || "Admin",
       timestamp: new Date().toISOString(),
       remarks: "PO dispatched via email and WhatsApp."
     }];
@@ -658,14 +1260,14 @@ Delivery Location: *${req.billTo}*
     const saved = await apiService.updateRequest(requestId, updatedReq);
     state.setRequests(state.requests.map(r => r.id === requestId ? saved : r));
 
-    state.logEvent("PO Shared via WhatsApp & Email", "Approved", "Booked", `Dispatched PO to ${supplier.companyName}`);
+    state.logEvent("PO Shared via WhatsApp & Email", "Approved", "Booked", `Dispatched PO to ${supplier.companyName || "supplier"}`);
     addNotification("Order Booked", `Order ${requestId} has been updated to Booked.`, "Both");
     
     state.initWhatsAppThread(requestId, formattedMsg);
 
-    window.open(`mailto:${supplier.email}?subject=Purchase Order Confirmation&body=${encodeURIComponent(formattedMsg)}`, '_blank');
+    window.open(`mailto:${supplier.email || ""}?subject=Purchase Order Confirmation&body=${encodeURIComponent(formattedMsg)}`, '_blank');
     setTimeout(() => {
-      window.open(`https://api.whatsapp.com/send?phone=${supplier.whatsappNumber}&text=${encodeURIComponent(formattedMsg)}`, '_blank');
+      window.open(`https://api.whatsapp.com/send?phone=${supplier.whatsappNumber || ""}&text=${encodeURIComponent(formattedMsg)}`, '_blank');
     }, 500);
 
     navigateTo('#live-orders');
@@ -756,17 +1358,15 @@ Delivery Location: *${req.billTo}*
 }
 
 // ----------------------------------------------------
-// 5. LIVE ORDERS VIEW COMPONENT
+// 4B. PENDING ORDERS VIEW COMPONENT
 // ----------------------------------------------------
-export function LiveOrdersView({ state, navigateTo }) {
+export function PendingOrdersView({ state, navigateTo }) {
   const user = state.currentUser;
   const isEmployee = user.role === "Employee";
 
-  const liveOrderStatuses = ["Approved", "Booked", "Acknowledged", "Picked", "In Transit", "LR Copy Received", "Reached Warehouse"];
-  
   const filteredRequests = isEmployee 
-    ? state.requests.filter(r => r.employeeName === user.name && liveOrderStatuses.includes(r.status)) 
-    : state.requests.filter(r => liveOrderStatuses.includes(r.status));
+    ? state.requests.filter(r => r.employeeName === user.name && r.status === "Pending") 
+    : state.requests.filter(r => r.status === "Pending");
 
   const sorted = [...filteredRequests].sort((a, b) => {
     return new Date(b.date) - new Date(a.date);
@@ -779,7 +1379,80 @@ export function LiveOrdersView({ state, navigateTo }) {
           <button className="back-btn" onClick={() => navigateTo('#home')} style={{ cursor: 'pointer' }}>
             <Icons.Back />
           </button>
-          <h1 style={{ fontSize: '20px' }}>Live orders</h1>
+          <h1 style={{ fontSize: '20px' }}>Pending Orders</h1>
+        </div>
+        <div className="header-right">
+          <div style={{ background: '#ffedd5', fontSize: '12px', fontWeight: '800', padding: '4px 8px', borderRadius: '4px', color: '#ea580c' }}>
+            {filteredRequests.length}
+          </div>
+        </div>
+      </header>
+
+      <div style={{ paddingTop: '10px' }}>
+        {sorted.length === 0 ? (
+          <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+            No pending orders found.
+          </div>
+        ) : (
+          sorted.map(req => {
+            return (
+              <div key={req.id} className="live-order-card" onClick={() => navigateTo(`#order-details?id=${req.id}`)} style={{ cursor: 'pointer' }}>
+                <div className="card-header-row">
+                  <h3>{req.productName}</h3>
+                  <span className="badge-view-details">Details</span>
+                </div>
+                
+                <div className="card-product-line">
+                  Qty - <b>{req.qty} {req.units}</b>
+                </div>
+
+                <div className="card-status-line">
+                  <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>{req.id}</span>
+                  <span className="status-badge pending">{req.status}</span>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------
+// 5. LIVE ORDERS VIEW COMPONENT
+// ----------------------------------------------------
+export function LiveOrdersView({ state, navigateTo }) {
+  const user = state.currentUser;
+  const isEmployee = user.role === "Employee";
+
+  const urlParams = new URLSearchParams(window.location.hash.split('?')[1] || "");
+  const filterParam = urlParams.get('filter');
+
+  const liveOrderStatuses = ["Approved", "Booked", "Acknowledged", "Picked", "In Transit", "LR Copy Received", "Reached Warehouse", "Delayed", "No Response"];
+  
+  let filteredRequests = isEmployee 
+    ? state.requests.filter(r => r.employeeName === user.name && liveOrderStatuses.includes(r.status)) 
+    : state.requests.filter(r => liveOrderStatuses.includes(r.status));
+
+  if (filterParam === 'delayed') {
+    filteredRequests = filteredRequests.filter(r => ["Delayed", "No Response"].includes(r.status));
+  } else {
+    filteredRequests = filteredRequests.filter(r => !["Delayed", "No Response"].includes(r.status));
+  }
+
+  const sorted = [...filteredRequests].sort((a, b) => {
+    return new Date(b.date) - new Date(a.date);
+  });
+
+  return (
+    <div>
+      <header className="app-header">
+        <div className="header-left">
+          <button className="back-btn" onClick={() => navigateTo('#home')} style={{ cursor: 'pointer' }}>
+            <Icons.Back />
+          </button>
+          <h1 style={{ fontSize: '20px' }}>{filterParam === 'delayed' ? 'Delayed Orders' : 'Live orders'}</h1>
         </div>
         <div className="header-right">
           <div style={{ background: '#e5dec9', fontSize: '12px', fontWeight: '800', padding: '4px 8px', borderRadius: '4px', color: 'var(--text-main)' }}>
@@ -823,9 +1496,38 @@ export function LiveOrdersView({ state, navigateTo }) {
 // ----------------------------------------------------
 // 6. ORDER DETAILS & TIMELINE COMPONENT
 // ----------------------------------------------------
-export function OrderDetailsView({ state, navigateTo, requestId, addNotification, openModal, setModalContent }) {
+export function OrderDetailsView({ state, navigateTo, requestId, addNotification, openModal, closeModal, setModalContent }) {
   const req = state.requests.find(r => r.id === requestId);
   if (!req) return <p style={{ padding: '20px' }}>Order not found</p>;
+
+  const [newComment, setNewComment] = useState("");
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFileName, setSelectedFileName] = useState("");
+
+  const handleSendComment = async (e) => {
+    e.preventDefault();
+    if (!newComment.trim()) return;
+
+    const updatedHistory = [...req.history, {
+      status: req.status,
+      updatedBy: state.currentUser.name,
+      role: state.currentUser.role,
+      timestamp: new Date().toISOString(),
+      remarks: newComment
+    }];
+
+    const updatedReq = {
+      ...req,
+      history: updatedHistory
+    };
+
+    const saved = await apiService.updateRequest(requestId, updatedReq);
+    state.setRequests(state.requests.map(r => r.id === requestId ? saved : r));
+
+    state.logEvent("Added Comment", req.status, req.status, `${state.currentUser.name} commented: ${newComment}`);
+
+    setNewComment("");
+  };
 
   const supplier = state.suppliers.find(s => s.id === req.supplierId) || { companyName: "Not Assigned" };
   const dateStr = new Date(req.date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
@@ -872,9 +1574,24 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
     state.triggerWebhook(eventKey, saved);
   };
 
-  const handleLrUpload = async (e) => {
+  const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    const allowedExtensions = ["pdf", "xls", "xlsx", "doc", "docx", "jpg", "jpeg", "png"];
+    const fileExt = file.name.split('.').pop().toLowerCase();
+    if (!allowedExtensions.includes(fileExt)) {
+      state.showToast("Security Alert", "Unauthorized file type. Only PDF, Word, Excel, and image formats are allowed.", "success");
+      e.target.value = ""; // Clear file selector
+      return;
+    }
+
+    setSelectedFile(file);
+    setSelectedFileName(file.name);
+  };
+
+  const handleUploadSubmit = async () => {
+    if (!selectedFile) return;
 
     const reader = new FileReader();
     reader.onloadend = async () => {
@@ -884,24 +1601,28 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
         updatedBy: state.currentUser.name,
         role: state.currentUser.role,
         timestamp: new Date().toISOString(),
-        remarks: "Uploaded LR consignment copy."
+        remarks: `Uploaded LR consignment copy: ${selectedFileName}`
       }];
 
       const updatedReq = {
         ...req,
         status: "LR Copy Received",
         lrCopy: base64data,
+        lrFileName: selectedFileName,
         history: updatedHistory
       };
 
       const saved = await apiService.updateRequest(requestId, updatedReq);
       state.setRequests(state.requests.map(r => r.id === requestId ? saved : r));
 
-      state.logEvent("Uploaded LR Consignment", req.status, "LR Copy Received", `Uploaded copy for ${requestId}`);
-      addNotification("LR Copy Received", `LR Copy has been uploaded for ${requestId}.`, "Both");
+      state.logEvent("Uploaded LR Consignment", req.status, "LR Copy Received", `Uploaded copy ${selectedFileName} for ${requestId}`);
+      addNotification("LR Copy Received", `LR Copy ${selectedFileName} has been uploaded for ${requestId}.`, "Both");
       state.triggerWebhook("lr.uploaded", saved);
+
+      setSelectedFile(null);
+      setSelectedFileName("");
     };
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(selectedFile);
   };
 
   const handleViewLr = () => {
@@ -920,8 +1641,137 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
   };
 
   const handleVerifyDeliver = () => {
-    const remarks = prompt("Enter delivery verification remarks:") || "Physically verified and counted.";
-    handleStatusChange("Delivered", remarks);
+    let remarks = "Physically verified and counted.";
+    setModalContent(
+      <div style={{ textAlign: 'left' }}>
+        <p style={{ fontSize: '13px', marginBottom: '12px' }}>Enter delivery verification remarks:</p>
+        <div className="form-group">
+          <input 
+            type="text" 
+            className="form-control" 
+            defaultValue={remarks} 
+            onChange={e => { remarks = e.target.value; }} 
+            style={{ cursor: 'text' }}
+          />
+        </div>
+        <button 
+          className="btn-orange" 
+          onClick={() => {
+            handleStatusChange("Delivered", remarks || "Physically verified and counted.");
+            closeModal();
+          }} 
+          style={{ width: '100%', cursor: 'pointer' }}
+        >
+          Confirm Delivery
+        </button>
+      </div>,
+      "Verify & Mark Delivered"
+    );
+    openModal();
+  };
+
+  const openEditTimelineModal = () => {
+    let tempHistory = [...req.history];
+
+    const handleStageFieldChange = (index, field, value) => {
+      tempHistory = tempHistory.map((item, idx) => 
+        idx === index ? { ...item, [field]: value } : item
+      );
+      renderModalContent();
+    };
+
+    const handleSaveTimeline = async () => {
+      const latestStatus = tempHistory[tempHistory.length - 1]?.status || req.status;
+
+      const updatedReq = {
+        ...req,
+        status: latestStatus,
+        history: tempHistory
+      };
+
+      const saved = await apiService.updateRequest(requestId, updatedReq);
+      state.setRequests(state.requests.map(r => r.id === requestId ? saved : r));
+
+      state.logEvent("Edited Logistics Timeline", req.status, latestStatus, `Admin edited logistics timeline entries for ${requestId}.`);
+      closeModal();
+    };
+
+    const formatDateTimeLocal = (isoString) => {
+      try {
+        const d = new Date(isoString);
+        const tzOffset = d.getTimezoneOffset() * 60000;
+        return (new Date(d.getTime() - tzOffset)).toISOString().slice(0, 16);
+      } catch (e) {
+        return "";
+      }
+    };
+
+    const renderModalContent = () => {
+      setModalContent(
+        <div style={{ textAlign: 'left', maxHeight: '400px', overflowY: 'auto', padding: '0 4px' }}>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+            Modify the logistics timeline entries below. The order status will update to match the final timeline stage.
+          </p>
+
+          {tempHistory.map((item, idx) => (
+            <div key={idx} style={{ borderBottom: '1.5px solid var(--border-color)', paddingBottom: '14px', marginBottom: '14px' }}>
+              <div style={{ fontWeight: 'bold', fontSize: '13px', color: 'var(--primary-orange)', marginBottom: '8px' }}>
+                Stage #{idx + 1} ({item.updatedBy})
+              </div>
+              
+              <div className="form-group">
+                <label>Stage / Status</label>
+                <select 
+                  className="form-control" 
+                  value={item.status} 
+                  onChange={e => handleStageFieldChange(idx, "status", e.target.value)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {["Pending", "Approved", "Booked", "Acknowledged", "Picked", "In Transit", "LR Copy Received", "Reached Warehouse", "Delivered", "Rejected", "Delayed", "Cancelled"].map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Timestamp</label>
+                <input 
+                  type="datetime-local" 
+                  className="form-control" 
+                  value={formatDateTimeLocal(item.timestamp)} 
+                  onChange={e => handleStageFieldChange(idx, "timestamp", new Date(e.target.value).toISOString())}
+                  style={{ cursor: 'text' }}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Remarks</label>
+                <textarea 
+                  className="form-control" 
+                  rows="2" 
+                  value={item.remarks || ""} 
+                  onChange={e => handleStageFieldChange(idx, "remarks", e.target.value)}
+                  style={{ resize: 'vertical', cursor: 'text' }}
+                ></textarea>
+              </div>
+            </div>
+          ))}
+
+          <button 
+            type="button" 
+            className="btn-orange" 
+            onClick={handleSaveTimeline}
+            style={{ width: '100%', padding: '12px', marginTop: '10px', cursor: 'pointer' }}
+          >
+            Save Timeline Changes
+          </button>
+        </div>,
+        "Edit Logistics Timeline"
+      );
+    };
+
+    renderModalContent();
+    openModal();
   };
 
   const hasEditPermission = state.currentUser.role === 'Main Admin' || (state.currentUser.role === 'Sub Admin' && state.currentUser.permissions?.edit_orders);
@@ -938,40 +1788,118 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
       </header>
 
       <div style={{ paddingTop: '10px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-          <h3 style={{ fontSize: '16px', fontWeight: '800', textAlign: 'left' }}>{supplier.companyName}</h3>
-          <span className={`status-badge ${req.status.toLowerCase().replace(/ /g, '')}`}>{req.status}</span>
+        {/* Dedicated high-contrast status card block */}
+        <div style={{ background: 'var(--dark-charcoal)', color: '#ffffff', borderRadius: '12px', padding: '16px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: 'var(--shadow-md)' }}>
+          <div style={{ textAlign: 'left' }}>
+            <div style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: '#a0978d', letterSpacing: '0.5px' }}>Current Order Status</div>
+            <div style={{ fontSize: '20px', fontWeight: '800', marginTop: '4px', color: '#ffffff' }}>{req.status}</div>
+          </div>
+          <span className={`status-badge ${req.status.toLowerCase().replace(/ /g, '')}`} style={{ padding: '8px 16px', fontSize: '13px', fontWeight: 'bold' }}>{req.status}</span>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: '800', textAlign: 'left', color: 'var(--text-main)' }}>Supplier: {supplier.companyName}</h3>
         </div>
 
         {req.poNumber && <div style={{ fontSize: '12px', marginBottom: '14px', textAlign: 'left' }}><b>PO Ref:</b> {req.poNumber} ({formatDate(req.poDate)})</div>}
 
-        {req.lrCopy ? (
-          <div className="lr-upload-box" style={{ borderStyle: 'solid', backgroundColor: '#f0fdf4', borderColor: 'var(--status-green)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={handleViewLr}>
-            <div className="lr-text-primary" style={{ color: 'var(--status-green)' }}>LR Copy Attached</div>
-            <span className="badge-view-lr" style={{ backgroundColor: 'var(--status-green)' }}>View LR</span>
-          </div>
-        ) : (
-          <div className="lr-upload-box" style={{ cursor: 'pointer' }}>
-            <div className="lr-text-primary">Upload LR Copy</div>
-            <input type="file" accept="image/*,application/pdf" onChange={handleLrUpload} style={{ cursor: 'pointer' }} />
-            <span className="badge-view-lr">Select File</span>
+        {req.suggestedSupplier && (
+          <div style={{ background: '#f9f9f8', padding: '12px', borderRadius: '8px', marginBottom: '14px', fontSize: '12px', textAlign: 'left', border: '1px solid var(--border-color)' }}>
+            <div style={{ fontWeight: '800', color: 'var(--primary-orange)', marginBottom: '6px' }}>Suggested Supplier Details:</div>
+            <div><b>Name:</b> {req.suggestedSupplier}</div>
+            {req.suggestedSupplierPhone && <div><b>Phone:</b> {req.suggestedSupplierPhone}</div>}
+            {req.suggestedSupplierEmail && <div><b>Email:</b> {req.suggestedSupplierEmail}</div>}
+            {req.suggestedSupplierRemarks && <div style={{ marginTop: '4px', fontStyle: 'italic', color: 'var(--text-muted)' }}><b>Remarks:</b> "{req.suggestedSupplierRemarks}"</div>}
           </div>
         )}
 
-        <div className="timeline-container">
-          <h4 style={{ fontSize: '12px', fontWeight: '700', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Logistics timeline</h4>
-          <div className="timeline">
-            <div className="timeline-progress-bar" style={{ width: `${progressWidth}%` }}></div>
-            {trackingStages.map((stage, idx) => {
-              let stateClass = "";
-              if (idx < currentStageIdx) stateClass = "completed";
-              else if (idx === currentStageIdx) stateClass = "active";
-              else if (req.status === "Delivered") stateClass = "completed";
+        {req.lrCopy ? (
+          <div className="lr-upload-box" style={{ borderStyle: 'solid', backgroundColor: '#f0fdf4', borderColor: 'var(--status-green)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={handleViewLr}>
+            <div className="lr-text-primary" style={{ color: 'var(--status-green)' }}>
+              LR Copy Attached {req.lrFileName ? `(${req.lrFileName})` : ''}
+            </div>
+            <span className="badge-view-lr" style={{ backgroundColor: 'var(--status-green)' }}>View LR</span>
+          </div>
+        ) : (
+          <div style={{ marginBottom: '14px' }}>
+            <label className="lr-upload-box" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', margin: 0 }}>
+              <div className="lr-text-primary">
+                {selectedFileName ? `Selected: ${selectedFileName}` : "Upload LR Copy"}
+              </div>
+              <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/*" onChange={handleFileSelect} style={{ display: 'none' }} />
+              <span className="badge-view-lr">Select File</span>
+            </label>
+            {selectedFile && (
+              <button 
+                onClick={handleUploadSubmit} 
+                className="btn-orange" 
+                style={{ marginTop: '8px', padding: '8px 16px', fontSize: '12px', width: 'auto', cursor: 'pointer' }}
+              >
+                Upload LR Document
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className="timeline-container" style={{ textAlign: 'left' }}>
+          <h4 style={{ fontSize: '12px', fontWeight: '700', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Logistics timeline</h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative', paddingLeft: '24px', borderLeft: '2px solid var(--border-color)', marginLeft: '12px' }}>
+            {req.history && req.history.map((item, idx) => {
+              const allStatuses = [
+                { name: "Requested", icon: "Clock", color: "#eab308" },
+                { name: "Pending", icon: "Clock", color: "#eab308" },
+                { name: "Approved", icon: "Check", color: "#2563eb" },
+                { name: "PO Generated", icon: "Document", color: "#8b5cf6" },
+                { name: "Supplier Assigned", icon: "Users", color: "#8b5cf6" },
+                { name: "Booked", icon: "Document", color: "#8b5cf6" },
+                { name: "Acknowledged", icon: "Check", color: "#a855f7" },
+                { name: "Picked", icon: "Check", color: "#f97316" },
+                { name: "In Transit", icon: "Clock", color: "#0ea5e9" },
+                { name: "LR Copy Received", icon: "Document", color: "#06b6d4" },
+                { name: "Reached Warehouse", icon: "Home", color: "#10b981" },
+                { name: "Delivered", icon: "Check", color: "#15803d" },
+                { name: "Rejected", icon: "Warning", color: "#6b7280" },
+                { name: "Delayed", icon: "Warning", color: "#ef4444" },
+                { name: "Cancelled", icon: "Warning", color: "#6b7280" }
+              ];
+              const statusInfo = allStatuses.find(s => s.name.toLowerCase() === (item.status || "").toLowerCase()) || { name: item.status, icon: "Clock", color: "var(--primary-orange)" };
+              const IconComp = Icons[statusInfo.icon] || Icons.Clock;
 
               return (
-                <div key={stage} className={`timeline-step ${stateClass}`}>
-                  <div className="timeline-dot">{idx + 1}</div>
-                  <div className="timeline-label">{stage}</div>
+                <div key={idx} style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {/* Indicator Dot */}
+                  <div style={{ 
+                    position: 'absolute', 
+                    left: '-35px', 
+                    top: '2px', 
+                    width: '20px', 
+                    height: '20px', 
+                    borderRadius: '50%', 
+                    backgroundColor: statusInfo.color, 
+                    color: 'white', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    border: '3px solid #ffffff',
+                    zIndex: 2
+                  }}>
+                    <IconComp style={{ width: '10px', height: '10px' }} />
+                  </div>
+                  {/* Content */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: '800', fontSize: '14px', color: 'var(--text-main)' }}>{item.status}</span>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                      {new Date(item.timestamp).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    Updated by: <b>{item.updatedBy}</b> ({item.role})
+                  </div>
+                  {item.remarks && (
+                    <div style={{ fontSize: '11px', color: 'var(--text-main)', fontStyle: 'italic', background: '#f9f9f8', border: '1px solid var(--border-color)', padding: '6px 10px', borderRadius: '4px', marginTop: '2px' }}>
+                      "{item.remarks}"
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -992,16 +1920,108 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
         )}
 
         {hasEditPermission && (
-          <div className="form-group" style={{ marginTop: '16px' }}>
-            <label>Change status</label>
-            <select className="form-control" onChange={e => handleStatusChange(e.target.value)} defaultValue="" style={{ cursor: 'pointer' }}>
-              <option value="" disabled>-- Choose New Status --</option>
-              {["Approved", "Booked", "Acknowledged", "Picked", "In Transit", "Reached Warehouse", "Delivered"].map(s => (
-                <option key={s} value={s} disabled={req.status === s}>{s}</option>
-              ))}
-            </select>
+          <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label>Change status</label>
+              <select className="form-control" onChange={e => handleStatusChange(e.target.value)} defaultValue="" style={{ cursor: 'pointer' }}>
+                <option value="" disabled>-- Choose New Status --</option>
+                {["Approved", "Booked", "Acknowledged", "Picked", "In Transit", "LR Copy Received", "Reached Warehouse", "Delivered", "Rejected", "Delayed", "Cancelled"].map(s => {
+                  const sequence = ["Pending", "Approved", "Booked", "Acknowledged", "Picked", "In Transit", "LR Copy Received", "Reached Warehouse", "Delivered"];
+                  let currentIdx = sequence.indexOf(req.status);
+                  if (currentIdx === -1 && req.history) {
+                    for (let i = req.history.length - 1; i >= 0; i--) {
+                      const histStatus = req.history[i].status;
+                      const idx = sequence.indexOf(histStatus);
+                      if (idx !== -1) {
+                        currentIdx = idx;
+                        break;
+                      }
+                    }
+                  }
+                  const targetIdx = sequence.indexOf(s);
+
+                  let disabled = false;
+                  let optionLabel = s;
+
+                  if (targetIdx !== -1 && currentIdx !== -1) {
+                    if (targetIdx <= currentIdx) {
+                      optionLabel = `${s} (Completed)`;
+                      disabled = true;
+                    } else if (targetIdx > currentIdx + 1) {
+                      disabled = true;
+                    } else if (targetIdx === currentIdx + 1) {
+                      optionLabel = `${s} (Next Stage)`;
+                    }
+                  } else {
+                    disabled = true;
+                  }
+
+                  const optionStyle = (targetIdx !== -1 && targetIdx <= currentIdx)
+                    ? { color: '#9ca3af', textDecoration: 'line-through' }
+                    : disabled ? { color: '#d1d5db' } : {};
+
+                  return (
+                    <option key={s} value={s} disabled={disabled} style={optionStyle}>
+                      {optionLabel}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+            
+            <button 
+              type="button" 
+              className="btn-dark" 
+              onClick={openEditTimelineModal} 
+              style={{ padding: '10px', marginTop: '4px', cursor: 'pointer', backgroundColor: 'var(--text-main)' }}
+            >
+              ⚙ Edit Timeline Log History
+            </button>
           </div>
         )}
+        {/* Activity Logs & Comments History Section */}
+        <div style={{ marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
+          <h4 style={{ fontSize: '12px', fontWeight: '700', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'left' }}>Conversation & Activity History</h4>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px', maxHeight: '300px', overflowY: 'auto', paddingRight: '4px' }}>
+            {req.history && req.history.map((h, i) => {
+              const formattedTime = new Date(h.timestamp).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+              return (
+                <div key={i} style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-sm)', padding: '10px', fontSize: '12px', textAlign: 'left', alignSelf: h.updatedBy === state.currentUser.name ? 'flex-end' : 'flex-start', width: '85%' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontWeight: 'bold', color: 'var(--primary-orange)' }}>
+                    <span>{h.updatedBy} ({h.role})</span>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{formattedTime}</span>
+                  </div>
+                  <div style={{ color: 'var(--text-main)', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{h.remarks}</div>
+                  {h.status !== req.history[i-1]?.status && (
+                    <div style={{ marginTop: '4px', fontSize: '10px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                      Status set to: {h.status}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Add Comments Form */}
+          <form onSubmit={handleSendComment} style={{ textAlign: 'left' }}>
+            <div className="form-group" style={{ marginBottom: '8px' }}>
+              <label>Add Comment</label>
+              <textarea
+                className="form-control"
+                placeholder="Type your comment/remarks here..."
+                rows="3"
+                value={newComment}
+                onChange={e => setNewComment(e.target.value)}
+                required
+                style={{ resize: 'vertical', width: '100%', cursor: 'text' }}
+              ></textarea>
+            </div>
+            <button type="submit" className="btn-orange" style={{ padding: '8px 16px', width: 'auto', display: 'inline-block', cursor: 'pointer' }}>
+              Send
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );
@@ -1052,63 +2072,159 @@ export function ChangePasswordForm({ user, apiService, closeModal }) {
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [currentPass, setCurrentPass] = useState("");
   const [newPass, setNewPass] = useState("");
   const [confirmPass, setConfirmPass] = useState("");
+  
+  const [currentError, setCurrentError] = useState("");
+  const [newError, setNewError] = useState("");
+  const [confirmError, setConfirmError] = useState("");
+  
+  const [success, setSuccess] = useState("");
+
+  const handleFocus = (field) => {
+    if (field === 'current') {
+      setShowNew(false);
+      setShowConfirm(false);
+    } else if (field === 'new') {
+      setShowCurrent(false);
+      setShowConfirm(false);
+    } else if (field === 'confirm') {
+      setShowCurrent(false);
+      setShowNew(false);
+    }
+  };
+
+  const handleBlur = (e) => {
+    const target = e.relatedTarget;
+    if (!target || !['currentPass', 'newPass', 'confirmPass'].includes(target.name)) {
+      setTimeout(() => {
+        setShowCurrent(false);
+        setShowNew(false);
+        setShowConfirm(false);
+      }, 100);
+    }
+  };
 
   const handleSavePassword = async (e) => {
     e.preventDefault();
-    const form = e.target;
-    const currentPass = form.elements.currentPass.value;
+    setCurrentError("");
+    setNewError("");
+    setConfirmError("");
+    setSuccess("");
+
+    let hasError = false;
 
     if (!isPasswordStrong(newPass)) {
-      alert("Please ensure your password meets all strength requirements.");
-      return;
+      setNewError("Please ensure your password meets all strength requirements.");
+      hasError = true;
     }
     if (newPass !== confirmPass) {
-      alert("New passwords do not match");
-      return;
+      setConfirmError("New passwords do not match.");
+      hasError = true;
     }
+
+    if (hasError) return;
+
+    // Mask passwords immediately on submission
+    setShowCurrent(false);
+    setShowNew(false);
+    setShowConfirm(false);
 
     try {
       await apiService.changePassword(user.id, currentPass, newPass);
-      alert("Password changed successfully!");
-      closeModal();
+      setSuccess("Password changed successfully!");
+      setTimeout(() => {
+        closeModal();
+      }, 1500);
     } catch (err) {
-      alert(err.message);
+      setCurrentError(err.message || "Incorrect current password.");
     }
   };
 
   return (
     <form onSubmit={handleSavePassword} style={{ textAlign: 'left' }}>
+      {success && <div style={{ color: 'var(--status-green)', fontSize: '12px', marginBottom: '10px' }}>✓ {success}</div>}
       <div className="form-group">
         <label>Current Password</label>
         <div style={{ position: 'relative' }}>
-          <input type={showCurrent ? "text" : "password"} name="currentPass" className="form-control" required style={{ cursor: 'text', paddingRight: '40px' }} />
-          <button type="button" onClick={() => setShowCurrent(!showCurrent)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }} title={showCurrent ? "Hide password" : "Show password"}>
+          <input 
+            type={showCurrent ? "text" : "password"} 
+            name="currentPass" 
+            value={currentPass}
+            onChange={e => { setCurrentPass(e.target.value); setCurrentError(""); }}
+            onFocus={() => handleFocus('current')}
+            onBlur={handleBlur}
+            className="form-control" 
+            required 
+            style={{ cursor: 'text', paddingRight: '40px', border: currentError ? '1.5px solid var(--status-red)' : '1px solid var(--border-color)' }} 
+          />
+          <button 
+            type="button" 
+            onClick={() => setShowCurrent(!showCurrent)} 
+            onMouseDown={e => e.preventDefault()}
+            style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }} 
+            title={showCurrent ? "Hide password" : "Show password"}
+          >
             {showCurrent ? <Icons.EyeSlash /> : <Icons.Eye />}
           </button>
         </div>
+        {currentError && <div style={{ color: 'var(--status-red)', fontSize: '11px', marginTop: '4px', textAlign: 'left' }}>⚠️ {currentError}</div>}
       </div>
       
       <div className="form-group">
         <label>New Password</label>
         <div style={{ position: 'relative' }}>
-          <input type={showNew ? "text" : "password"} name="newPass" value={newPass} onChange={e => setNewPass(e.target.value)} className="form-control" required style={{ cursor: 'text', paddingRight: '40px' }} />
-          <button type="button" onClick={() => setShowNew(!showNew)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }} title={showNew ? "Hide password" : "Show password"}>
+          <input 
+            type={showNew ? "text" : "password"} 
+            name="newPass" 
+            value={newPass} 
+            onChange={e => { setNewPass(e.target.value); if (isPasswordStrong(e.target.value)) setNewError(""); }} 
+            onFocus={() => handleFocus('new')}
+            onBlur={handleBlur}
+            className="form-control" 
+            required 
+            style={{ cursor: 'text', paddingRight: '40px', border: newError ? '1.5px solid var(--status-red)' : '1px solid var(--border-color)' }} 
+          />
+          <button 
+            type="button" 
+            onClick={() => setShowNew(!showNew)} 
+            onMouseDown={e => e.preventDefault()}
+            style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }} 
+            title={showNew ? "Hide password" : "Show password"}
+          >
             {showNew ? <Icons.EyeSlash /> : <Icons.Eye />}
           </button>
         </div>
+        {newError && <div style={{ color: 'var(--status-red)', fontSize: '11px', marginTop: '4px', textAlign: 'left' }}>⚠️ {newError}</div>}
         <PasswordStrengthIndicator password={newPass} />
       </div>
 
       <div className="form-group" style={{ marginBottom: '20px' }}>
         <label>Confirm Password</label>
         <div style={{ position: 'relative' }}>
-          <input type={showConfirm ? "text" : "password"} name="confirmPass" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} className="form-control" required style={{ cursor: 'text', paddingRight: '40px' }} />
-          <button type="button" onClick={() => setShowConfirm(!showConfirm)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }} title={showConfirm ? "Hide password" : "Show password"}>
+          <input 
+            type={showConfirm ? "text" : "password"} 
+            name="confirmPass" 
+            value={confirmPass} 
+            onChange={e => { setConfirmPass(e.target.value); if (e.target.value === newPass) setConfirmError(""); }} 
+            onFocus={() => handleFocus('confirm')}
+            onBlur={handleBlur}
+            className="form-control" 
+            required 
+            style={{ cursor: 'text', paddingRight: '40px', border: confirmError ? '1.5px solid var(--status-red)' : '1px solid var(--border-color)' }} 
+          />
+          <button 
+            type="button" 
+            onClick={() => setShowConfirm(!showConfirm)} 
+            onMouseDown={e => e.preventDefault()}
+            style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }} 
+            title={showConfirm ? "Hide password" : "Show password"}
+          >
             {showConfirm ? <Icons.EyeSlash /> : <Icons.Eye />}
           </button>
         </div>
+        {confirmError && <div style={{ color: 'var(--status-red)', fontSize: '11px', marginTop: '4px', textAlign: 'left' }}>⚠️ {confirmError}</div>}
       </div>
       <button type="submit" className="btn-dark" style={{ cursor: 'pointer' }}>Change Password</button>
     </form>
@@ -1128,7 +2244,7 @@ export function SettingsView({ state, navigateTo, openModal, closeModal, setModa
 
   const openChangePasswordModal = () => {
     setModalContent(
-      <ChangePasswordForm user={user} apiService={apiService} closeModal={closeModal} />,
+      <ChangePasswordForm key="change-password-form" user={user} apiService={apiService} closeModal={closeModal} />,
       "Change Password"
     );
     openModal();
@@ -1137,7 +2253,7 @@ export function SettingsView({ state, navigateTo, openModal, closeModal, setModa
   const handleSaveAvatar = async (updatedUser) => {
     await apiService.saveUser(updatedUser);
     state.setCurrentUser(updatedUser);
-    alert("Avatar setting saved successfully!");
+    state.showToast("Avatar Settings Saved", "Your avatar customization was updated successfully.", "success");
     closeModal();
   };
 
@@ -1197,6 +2313,16 @@ export function SettingsView({ state, navigateTo, openModal, closeModal, setModa
             </div>
           )}
 
+          {isMainAdmin && (
+            <div className="settings-item" onClick={() => navigateTo('#settings/departments')} style={{ cursor: 'pointer' }}>
+              <div className="settings-item-left">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" style={{ color: 'var(--primary-orange)' }}><rect x="3" y="3" width="7" height="9" /><rect x="14" y="3" width="7" height="5" /><rect x="14" y="12" width="7" height="9" /><rect x="3" y="16" width="7" height="5" /></svg>
+                <span className="settings-title">Department Management</span>
+              </div>
+              <Icons.ChevronRight />
+            </div>
+          )}
+
           <div className="settings-item" onClick={() => navigateTo('#settings/notifications')} style={{ cursor: 'pointer' }}>
             <div className="settings-item-left">
               <Icons.Bell />
@@ -1243,7 +2369,7 @@ export function SettingsView({ state, navigateTo, openModal, closeModal, setModa
 // 8. SUPPLIERS MANAGER SUB-VIEW COMPONENT
 // ----------------------------------------------------
 export function SuppliersView({ state, navigateTo, openModal, setModalContent, closeModal }) {
-  const isAdmin = state.activeRole === "Admin";
+  const isAdmin = state.activeRole === "Main Admin" || state.activeRole === "Sub Admin";
   const [suppliers, setSuppliers] = useState(state.suppliers);
 
   useEffect(() => {
@@ -1304,6 +2430,9 @@ export function SuppliersView({ state, navigateTo, openModal, setModalContent, c
             <div style={{ fontSize: '12px', marginBottom: '6px', lineHeight: '1.4' }}>
               <b>WA:</b> {sup.whatsappNumber} &nbsp;&bull;&nbsp; <b>Email:</b> {sup.email}
             </div>
+            {sup.gst && <div style={{ fontSize: '12px', marginBottom: '6px' }}><b>GST No:</b> {sup.gst}</div>}
+            <div style={{ fontSize: '12px', marginBottom: '6px' }}><b>Rating:</b> {"⭐".repeat(sup.rating || 5)}</div>
+            {sup.remarks && <div style={{ fontSize: '12px', marginBottom: '6px', fontStyle: 'italic', color: 'var(--text-muted)' }}><b>Remarks:</b> {sup.remarks}</div>}
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', background: 'var(--bg-cream)', padding: '6px 10px', borderRadius: '4px', marginTop: '6px' }}>
               <b>Products:</b> {sup.products}
             </div>
@@ -1321,10 +2450,16 @@ function SupplierForm({ supplier, onSave }) {
   const [email, setEmail] = useState(supplier ? supplier.email : "");
   const [address, setAddress] = useState(supplier ? supplier.address : "");
   const [products, setProducts] = useState(supplier ? supplier.products : "");
+  
+  // New Supplier details
+  const [gst, setGst] = useState(supplier ? (supplier.gst || "") : "");
+  const [rating, setRating] = useState(supplier ? (supplier.rating || 5) : 5);
+  const [remarks, setRemarks] = useState(supplier ? (supplier.remarks || "") : "");
+  const [validationError, setValidationError] = useState("");
 
   const handleSave = () => {
     if (!company || !contact || !phone) {
-      alert("Please fill in Company name, Contact person, and phone.");
+      setValidationError("Please fill in Company name, Contact person, and WhatsApp number.");
       return;
     }
     const data = {
@@ -1336,38 +2471,68 @@ function SupplierForm({ supplier, onSave }) {
       email,
       address,
       products,
-      remarks: supplier ? supplier.remarks : ""
+      gst,
+      rating: parseInt(rating),
+      remarks
     };
     onSave(data, !!supplier);
   };
 
   return (
-    <div>
+    <div style={{ textAlign: 'left' }}>
+      {validationError && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '10px', borderRadius: '6px', color: '#b91c1c', fontSize: '12px', fontWeight: '700', marginBottom: '14px' }}>
+          ⚠️ {validationError}
+        </div>
+      )}
+
       <div className="form-group">
         <label>Company Name</label>
-        <input type="text" className="form-control" value={company} onChange={e => setCompany(e.target.value)} />
+        <input type="text" className="form-control" placeholder="Company Name" value={company} onChange={e => setCompany(e.target.value)} />
       </div>
-      <div class="form-group">
+      <div className="form-group">
         <label>Contact Person</label>
-        <input type="text" className="form-control" value={contact} onChange={e => setContact(e.target.value)} />
+        <input type="text" className="form-control" placeholder="Contact Person" value={contact} onChange={e => setContact(e.target.value)} />
       </div>
-      <div class="form-group">
-        <label>WhatsApp Number</label>
-        <input type="text" className="form-control" value={phone} onChange={e => setPhone(e.target.value)} />
+      <div className="form-row">
+        <div className="form-group">
+          <label>WhatsApp Number</label>
+          <input type="text" className="form-control" placeholder="WhatsApp Number" value={phone} onChange={e => setPhone(e.target.value)} />
+        </div>
+        <div className="form-group">
+          <label>GST Number (Optional)</label>
+          <input type="text" className="form-control" placeholder="GST Number" value={gst} onChange={e => setGst(e.target.value)} />
+        </div>
       </div>
-      <div class="form-group">
-        <label>Email</label>
-        <input type="email" className="form-control" value={email} onChange={e => setEmail(e.target.value)} />
+      <div className="form-row">
+        <div className="form-group">
+          <label>Email (Optional)</label>
+          <input type="email" className="form-control" placeholder="Email Address" value={email} onChange={e => setEmail(e.target.value)} />
+        </div>
+        <div className="form-group">
+          <label>Rating (1-5 Stars)</label>
+          <select className="form-control" value={rating} onChange={e => setRating(e.target.value)} style={{ cursor: 'pointer' }}>
+            <option value="5">⭐⭐⭐⭐⭐ (5 Stars)</option>
+            <option value="4">⭐⭐⭐⭐ (4 Stars)</option>
+            <option value="3">⭐⭐⭐ (3 Stars)</option>
+            <option value="2">⭐⭐ (2 Stars)</option>
+            <option value="1">⭐ (1 Star)</option>
+          </select>
+        </div>
       </div>
-      <div class="form-group">
-        <label>Address</label>
-        <input type="text" className="form-control" value={address} onChange={e => setAddress(e.target.value)} />
+      <div className="form-group">
+        <label>Address (Optional)</label>
+        <input type="text" className="form-control" placeholder="Address" value={address} onChange={e => setAddress(e.target.value)} />
       </div>
-      <div class="form-group">
-        <label>Products Supplied</label>
-        <input type="text" className="form-control" value={products} onChange={e => setProducts(e.target.value)} />
+      <div className="form-group">
+        <label>Products Supplied (Optional)</label>
+        <input type="text" className="form-control" placeholder="Products Supplied (e.g. bearings, valves)" value={products} onChange={e => setProducts(e.target.value)} />
       </div>
-      <button className="btn-dark" onClick={handleSave} style={{ marginTop: '10px' }}>Save</button>
+      <div className="form-group">
+        <label>Supplier Remarks (Optional)</label>
+        <textarea className="form-control" rows="2" placeholder="Supplier Remarks (e.g. fast shipping)" value={remarks} onChange={e => setRemarks(e.target.value)} style={{ resize: 'vertical' }}></textarea>
+      </div>
+      <button className="btn-dark" onClick={handleSave} style={{ marginTop: '10px', width: '100%', cursor: 'pointer' }}>Save Supplier</button>
     </div>
   );
 }
@@ -1455,29 +2620,34 @@ export function AuditLogsView({ state, navigateTo }) {
   }, [query, state.logs]);
 
   const handleExport = () => {
-    let csvContent = "data:text/csv;charset=utf-8,";
-    csvContent += "Timestamp,User,Role,Action,Previous Value,Updated Value,Details\n";
+    let csvContent = "Timestamp,User,Role,Action,Previous Value,Updated Value,Details\n";
 
-    state.logs.forEach(log => {
+    // Export current filtered search results
+    logs.forEach(log => {
       const row = [
         log.timestamp,
-        `"${log.userName}"`,
-        `"${log.role}"`,
-        `"${log.action}"`,
-        `"${log.previousValue}"`,
-        `"${log.updatedValue}"`,
+        `"${log.userName.replace(/"/g, '""')}"`,
+        `"${log.role.replace(/"/g, '""')}"`,
+        `"${log.action.replace(/"/g, '""')}"`,
+        `"${log.previousValue.replace(/"/g, '""')}"`,
+        `"${log.updatedValue.replace(/"/g, '""')}"`,
         `"${log.details ? log.details.replace(/"/g, '""') : ''}"`
       ].join(",");
       csvContent += row + "\n";
     });
 
-    const encodedUri = encodeURI(csvContent);
+    // Create Blob with UTF-8 BOM for universal mobile and desktop compatibility
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
+    link.setAttribute("href", url);
     link.setAttribute("download", `Alagiri_Audit_Logs_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -1596,21 +2766,10 @@ export function OrderHistoryView({ state, navigateTo }) {
 // 12. LOGIN VIEW COMPONENT
 // ----------------------------------------------------
 export function LoginView({ onLogin }) {
-  const [isRegistering, setIsRegistering] = useState(false);
-  
   // Login fields
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-
-  // Registration (Sign In / Create Account) fields
-  const [regUsername, setRegUsername] = useState("");
-  const [regFullName, setRegFullName] = useState("");
-  const [regDepartment, setRegDepartment] = useState("");
-  const [regPassword, setRegPassword] = useState("");
-  const [regConfirmPass, setRegConfirmPass] = useState("");
-  const [showRegPassword, setShowRegPassword] = useState(false);
-  const [showRegConfirm, setShowRegConfirm] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -1633,58 +2792,6 @@ export function LoginView({ onLogin }) {
     }
   };
 
-  const handleRegisterSubmit = async (e) => {
-    e.preventDefault();
-    if (!regUsername || !regFullName || !regDepartment || !regPassword || !regConfirmPass) {
-      setError("Please fill in all fields.");
-      return;
-    }
-    if (!isPasswordStrong(regPassword)) {
-      setError("Please ensure your password meets all strength requirements.");
-      return;
-    }
-    if (regPassword !== regConfirmPass) {
-      setError("Passwords do not match.");
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-    try {
-      // Check if username already exists
-      const users = await apiService.getUsers();
-      const exists = users.some(u => u.username.toLowerCase() === regUsername.toLowerCase());
-      if (exists) {
-        throw new Error("Username already exists. Please choose another.");
-      }
-
-      // Hash password
-      const passwordHash = await hashPassword(regPassword);
-
-      // Create new user object - Force Employee role for security
-      const newUser = {
-        id: "usr-" + Math.random().toString(36).slice(-8),
-        username: regUsername,
-        name: regFullName,
-        role: "Employee",
-        department: regDepartment,
-        passwordHash,
-        enabled: true,
-        mustChangePassword: false, 
-        avatar: "",
-        permissions: null
-      };
-
-      await apiService.saveUser(newUser);
-      alert("Registration successful! Logging you in.");
-      onLogin(newUser);
-    } catch (err) {
-      setError(err.message || "Failed to register account.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '80vh', justifyContent: 'center', padding: '20px' }}>
       <div style={{ textAlign: 'center', marginBottom: '24px' }}>
@@ -1693,132 +2800,100 @@ export function LoginView({ onLogin }) {
       </div>
 
       <div style={{ background: 'var(--card-bg)', border: '1.5px solid var(--border-color)', borderRadius: 'var(--border-radius-lg)', padding: '24px', boxShadow: 'var(--shadow-md)' }}>
-        
-        {/* Toggle tabs for Log In vs Sign In (Register) */}
-        <div style={{ display: 'flex', borderBottom: '2px solid var(--border-color)', marginBottom: '20px' }}>
-          <button type="button" onClick={() => { setIsRegistering(false); setError(""); }} style={{ flex: 1, padding: '10px', background: 'none', border: 'none', borderBottom: !isRegistering ? '2px solid var(--primary-orange)' : 'none', fontWeight: !isRegistering ? '800' : '600', color: !isRegistering ? 'var(--primary-orange)' : 'var(--text-muted)', cursor: 'pointer', transition: 'all 0.2s' }}>
-            Log In
-          </button>
-          <button type="button" onClick={() => { setIsRegistering(true); setError(""); }} style={{ flex: 1, padding: '10px', background: 'none', border: 'none', borderBottom: isRegistering ? '2px solid var(--primary-orange)' : 'none', fontWeight: isRegistering ? '800' : '600', color: isRegistering ? 'var(--primary-orange)' : 'var(--text-muted)', cursor: 'pointer', transition: 'all 0.2s' }}>
-            Sign In (Register)
-          </button>
-        </div>
-
         {error && (
           <div style={{ background: '#fef2f2', border: '1px solid #fee2e2', color: '#ef4444', padding: '10px 14px', borderRadius: '8px', fontSize: '12px', marginBottom: '16px', textAlign: 'left' }}>
             ⚠️ {error}
           </div>
         )}
 
-        {!isRegistering ? (
-          /* LOG IN FORM */
-          <form onSubmit={handleLoginSubmit} style={{ textAlign: 'left' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '16px', color: 'var(--text-main)' }}>Sign In to your account</h2>
-            
-            <div className="form-group">
-              <label>Username</label>
-              <input type="text" className="form-control" placeholder="Enter Username" value={username} onChange={e => setUsername(e.target.value)} required style={{ cursor: 'text' }} />
+        {/* LOG IN FORM */}
+        <form onSubmit={handleLoginSubmit} style={{ textAlign: 'left' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '16px', color: 'var(--text-main)' }}>Sign In to your account</h2>
+          
+          <div className="form-group">
+            <label>Username</label>
+            <input type="text" className="form-control" placeholder="Enter Username" value={username} onChange={e => setUsername(e.target.value)} required style={{ cursor: 'text' }} />
+          </div>
+
+          <div className="form-group" style={{ marginBottom: '20px' }}>
+            <label>Password</label>
+            <div style={{ position: 'relative' }}>
+              <input type={showPassword ? "text" : "password"} className="form-control" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required style={{ cursor: 'text', paddingRight: '40px' }} />
+              <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }} title={showPassword ? "Hide password" : "Show password"}>
+                {showPassword ? <Icons.EyeSlash /> : <Icons.Eye />}
+              </button>
             </div>
+          </div>
 
-            <div className="form-group" style={{ marginBottom: '20px' }}>
-              <label>Password</label>
-              <div style={{ position: 'relative' }}>
-                <input type={showPassword ? "text" : "password"} className="form-control" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required style={{ cursor: 'text', paddingRight: '40px' }} />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }} title={showPassword ? "Hide password" : "Show password"}>
-                  {showPassword ? <Icons.EyeSlash /> : <Icons.Eye />}
-                </button>
-              </div>
-            </div>
-
-            <button type="submit" className="btn-orange" disabled={loading} style={{ width: '100%', padding: '12px', fontSize: '14px', cursor: 'pointer' }}>
-              {loading ? "Authenticating..." : "Login"}
-            </button>
-          </form>
-        ) : (
-          /* SIGN IN (REGISTRATION) FORM */
-          <form onSubmit={handleRegisterSubmit} style={{ textAlign: 'left' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '16px', color: 'var(--text-main)' }}>Register New Account</h2>
-            
-            <div className="form-group">
-              <label>Username</label>
-              <input type="text" className="form-control" placeholder="e.g. johndoe" value={regUsername} onChange={e => setRegUsername(e.target.value)} required style={{ cursor: 'text' }} />
-            </div>
-
-            <div className="form-group">
-              <label>Full Name</label>
-              <input type="text" className="form-control" placeholder="e.g. John Doe" value={regFullName} onChange={e => setRegFullName(e.target.value)} required style={{ cursor: 'text' }} />
-            </div>
-
-            <div className="form-group">
-              <label>Department</label>
-              <input type="text" className="form-control" placeholder="e.g. Maintenance" value={regDepartment} onChange={e => setRegDepartment(e.target.value)} required style={{ cursor: 'text' }} />
-            </div>
-
-
-
-            <div className="form-group">
-              <label>Password</label>
-              <div style={{ position: 'relative' }}>
-                <input type={showRegPassword ? "text" : "password"} className="form-control" placeholder="••••••••" value={regPassword} onChange={e => setRegPassword(e.target.value)} required style={{ cursor: 'text', paddingRight: '40px' }} />
-                <button type="button" onClick={() => setShowRegPassword(!showRegPassword)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }} title={showRegPassword ? "Hide password" : "Show password"}>
-                  {showRegPassword ? <Icons.EyeSlash /> : <Icons.Eye />}
-                </button>
-              </div>
-              <PasswordStrengthIndicator password={regPassword} />
-            </div>
-
-            <div className="form-group" style={{ marginBottom: '20px' }}>
-              <label>Confirm Password</label>
-              <div style={{ position: 'relative' }}>
-                <input type={showRegConfirm ? "text" : "password"} className="form-control" placeholder="••••••••" value={regConfirmPass} onChange={e => setRegConfirmPass(e.target.value)} required style={{ cursor: 'text', paddingRight: '40px' }} />
-                <button type="button" onClick={() => setShowRegConfirm(!showRegConfirm)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }} title={showRegConfirm ? "Hide password" : "Show password"}>
-                  {showRegConfirm ? <Icons.EyeSlash /> : <Icons.Eye />}
-                </button>
-              </div>
-            </div>
-
-            <button type="submit" className="btn-orange" disabled={loading} style={{ width: '100%', padding: '12px', fontSize: '14px', cursor: 'pointer' }}>
-              {loading ? "Registering..." : "Register (Sign In)"}
-            </button>
-          </form>
-        )}
-      </div>
-      <div style={{ textAlign: 'center', marginTop: '24px', fontSize: '11px', color: 'var(--text-muted)' }}>
-        <div>Version 2.0.0 • Secure Authentication</div>
-        <button type="button" onClick={() => { localStorage.clear(); location.reload(); }} style={{ marginTop: '10px', background: 'none', border: 'none', color: 'var(--primary-orange)', textDecoration: 'underline', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
-          Reset Simulation Database (Clear Storage)
-        </button>
-      </div>
+          <button type="submit" className="btn-orange" disabled={loading} style={{ width: '100%', padding: '12px', fontSize: '14px', cursor: 'pointer' }}>
+            {loading ? "Authenticating..." : "Login"}
+          </button>
+      </form>
     </div>
+  </div>
   );
 }
 
 // ----------------------------------------------------
 // 13. FORCE CHANGE PASSWORD VIEW
 // ----------------------------------------------------
-export function ForceChangePasswordView({ user, onPasswordChanged }) {
+export function ForceChangePasswordView({ state, user, onPasswordChanged }) {
   const [newPass, setNewPass] = useState("");
   const [confirmPass, setConfirmPass] = useState("");
   const [error, setError] = useState("");
+  const [newError, setNewError] = useState("");
+  const [confirmError, setConfirmError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showNewPass, setShowNewPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
 
+  const handleFocus = (field) => {
+    if (field === 'new') {
+      setShowConfirmPass(false);
+    } else if (field === 'confirm') {
+      setShowNewPass(false);
+    }
+  };
+
+  const handleBlur = (e) => {
+    const target = e.relatedTarget;
+    if (!target || !['newPass', 'confirmPass'].includes(target.name)) {
+      setTimeout(() => {
+        setShowNewPass(false);
+        setShowConfirmPass(false);
+      }, 100);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");
+    setNewError("");
+    setConfirmError("");
+    
+    let hasError = false;
+
     if (!isPasswordStrong(newPass)) {
-      setError("Please ensure your password meets all strength requirements.");
-      return;
+      setNewError("Please ensure your password meets all strength requirements.");
+      hasError = true;
     }
     if (newPass !== confirmPass) {
-      setError("Passwords do not match.");
-      return;
+      setConfirmError("Passwords do not match.");
+      hasError = true;
     }
+
+    if (hasError) return;
+
+    // Mask passwords immediately on submission
+    setShowNewPass(false);
+    setShowConfirmPass(false);
+
     setLoading(true);
-    setError("");
     try {
       const updatedUser = await apiService.forceChangePassword(user.id, newPass);
-      alert("Password changed successfully! Welcome to Alagiri.");
+      if (state && state.showToast) {
+        state.showToast("Password Updated", "Password changed successfully! Welcome to Alagiri.", "success");
+      }
       onPasswordChanged(updatedUser);
     } catch (err) {
       setError(err.message || "An error occurred");
@@ -1845,22 +2920,58 @@ export function ForceChangePasswordView({ user, onPasswordChanged }) {
           <div className="form-group">
             <label>New Password</label>
             <div style={{ position: 'relative' }}>
-              <input type={showNewPass ? "text" : "password"} className="form-control" placeholder="••••••••" value={newPass} onChange={e => setNewPass(e.target.value)} required style={{ cursor: 'text', paddingRight: '40px' }} />
-              <button type="button" onClick={() => setShowNewPass(!showNewPass)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }} title={showNewPass ? "Hide password" : "Show password"}>
+              <input 
+                type={showNewPass ? "text" : "password"} 
+                name="newPass"
+                className="form-control" 
+                placeholder="••••••••" 
+                value={newPass} 
+                onChange={e => { setNewPass(e.target.value); if (isPasswordStrong(e.target.value)) setNewError(""); }} 
+                onFocus={() => handleFocus('new')}
+                onBlur={handleBlur}
+                required 
+                style={{ cursor: 'text', paddingRight: '40px', border: newError ? '1.5px solid var(--status-red)' : '1px solid var(--border-color)' }} 
+              />
+              <button 
+                type="button" 
+                onClick={() => setShowNewPass(!showNewPass)} 
+                onMouseDown={e => e.preventDefault()}
+                style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }} 
+                title={showNewPass ? "Hide password" : "Show password"}
+              >
                 {showNewPass ? <Icons.EyeSlash /> : <Icons.Eye />}
               </button>
             </div>
+            {newError && <div style={{ color: 'var(--status-red)', fontSize: '11px', marginTop: '4px', textAlign: 'left' }}>⚠️ {newError}</div>}
             <PasswordStrengthIndicator password={newPass} />
           </div>
 
           <div className="form-group" style={{ marginBottom: '20px' }}>
             <label>Confirm Password</label>
             <div style={{ position: 'relative' }}>
-              <input type={showConfirmPass ? "text" : "password"} className="form-control" placeholder="••••••••" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} required style={{ cursor: 'text', paddingRight: '40px' }} />
-              <button type="button" onClick={() => setShowConfirmPass(!showConfirmPass)} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }} title={showConfirmPass ? "Hide password" : "Show password"}>
+              <input 
+                type={showConfirmPass ? "text" : "password"} 
+                name="confirmPass"
+                className="form-control" 
+                placeholder="••••••••" 
+                value={confirmPass} 
+                onChange={e => { setConfirmPass(e.target.value); if (e.target.value === newPass) setConfirmError(""); }} 
+                onFocus={() => handleFocus('confirm')}
+                onBlur={handleBlur}
+                required 
+                style={{ cursor: 'text', paddingRight: '40px', border: confirmError ? '1.5px solid var(--status-red)' : '1px solid var(--border-color)' }} 
+              />
+              <button 
+                type="button" 
+                onClick={() => setShowConfirmPass(!showConfirmPass)} 
+                onMouseDown={e => e.preventDefault()}
+                style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }} 
+                title={showConfirmPass ? "Hide password" : "Show password"}
+              >
                 {showConfirmPass ? <Icons.EyeSlash /> : <Icons.Eye />}
               </button>
             </div>
+            {confirmError && <div style={{ color: 'var(--status-red)', fontSize: '11px', marginTop: '4px', textAlign: 'left' }}>⚠️ {confirmError}</div>}
           </div>
 
           <button type="submit" className="btn-orange" disabled={loading} style={{ width: '100%', padding: '12px', fontSize: '14px', cursor: 'pointer' }}>
@@ -1875,7 +2986,7 @@ export function ForceChangePasswordView({ user, onPasswordChanged }) {
 // ----------------------------------------------------
 // 14. USER MANAGEMENT VIEW COMPONENT
 // ----------------------------------------------------
-export function UserManagementView({ state, navigateTo }) {
+export function UserManagementView({ state, navigateTo, openModal, closeModal, setModalContent }) {
   const [users, setUsers] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editUser, setEditUser] = useState(null);
@@ -1885,6 +2996,8 @@ export function UserManagementView({ state, navigateTo }) {
   const [name, setName] = useState("");
   const [role, setRole] = useState("Employee");
   const [department, setDepartment] = useState("Kraft Mill");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [permissions, setPermissions] = useState({
     approve_requests: false,
     manage_suppliers: false,
@@ -1892,13 +3005,63 @@ export function UserManagementView({ state, navigateTo }) {
     edit_orders: false
   });
 
-  const loadUsers = async () => {
+  const [errors, setErrors] = useState({});
+
+  const validateUserField = (field, value) => {
+    let err = "";
+    if (field === "name") {
+      if (!value.trim()) {
+        err = "Full Name is required.";
+      } else {
+        const nameRegex = /^[a-zA-Z\s.\-']+$/;
+        if (!nameRegex.test(value.trim())) {
+          err = "Full Name contains invalid characters.";
+        }
+      }
+    } else if (field === "email") {
+      if (!value.trim()) {
+        err = "Email address is required.";
+      } else {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(value.trim())) {
+          err = "Invalid email format.";
+        } else {
+          const duplicateEmail = users.some(u => u.email?.toLowerCase() === value.trim().toLowerCase() && u.id !== (editUser ? editUser.id : ''));
+          if (duplicateEmail) {
+            err = "Email address is already in use by another user.";
+          }
+        }
+      }
+    } else if (field === "phone") {
+      if (!value.trim()) {
+        err = "Phone number is required.";
+      } else {
+        const phoneRegex = /^(?:\+91)?\d{10}$/;
+        if (!phoneRegex.test(value.trim())) {
+          err = "Invalid Indian mobile number (must be a 10-digit number, optionally starting with +91).";
+        }
+      }
+    }
+    setErrors(prev => {
+      const next = { ...prev };
+      if (err) next[field] = err;
+      else delete next[field];
+      return next;
+    });
+  };
+
+  const [activeDepts, setActiveDepts] = useState([]);
+
+  const loadUsersAndDepts = async () => {
     const list = await apiService.getUsers();
     setUsers(list);
+    const depts = await apiService.getDepartments();
+    const active = depts.filter(d => !d.disabled);
+    setActiveDepts(active);
   };
 
   useEffect(() => {
-    loadUsers();
+    loadUsersAndDepts();
   }, []);
 
   const handleTogglePerm = (perm) => {
@@ -1910,8 +3073,44 @@ export function UserManagementView({ state, navigateTo }) {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!username || !name) {
-      alert("Username and Full Name are required");
+    
+    const newErrors = {};
+    if (!name.trim()) newErrors.name = "Full Name is required.";
+    else {
+      const nameRegex = /^[a-zA-Z\s.\-']+$/;
+      if (!nameRegex.test(name.trim())) {
+        newErrors.name = "Full Name contains invalid characters.";
+      }
+    }
+
+    if (!email.trim()) newErrors.email = "Email address is required.";
+    else {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email.trim())) {
+        newErrors.email = "Invalid email format.";
+      } else {
+        const duplicateEmail = users.some(u => u.email?.toLowerCase() === email.trim().toLowerCase() && u.id !== (editUser ? editUser.id : ''));
+        if (duplicateEmail) {
+          newErrors.email = "Email address is already in use by another user.";
+        }
+      }
+    }
+
+    if (!phone.trim()) newErrors.phone = "Phone number is required.";
+    else {
+      const phoneRegex = /^(?:\+91)?\d{10}$/;
+      if (!phoneRegex.test(phone.trim())) {
+        newErrors.phone = "Invalid Indian mobile number (must be a 10-digit number, optionally starting with +91).";
+      }
+    }
+
+    if (!username.trim() && !editUser) {
+      newErrors.username = "Username is required.";
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      state.showToast("Validation Error", "Please resolve all validation errors before saving.", "success");
       return;
     }
 
@@ -1923,10 +3122,22 @@ export function UserManagementView({ state, navigateTo }) {
           name,
           role,
           department,
+          email,
+          phone,
           permissions: role === "Sub Admin" ? permissions : {}
         };
         await apiService.saveUser(updated);
         state.logEvent("Edited User Account", editUser.username, username, `Main Admin updated user settings for ${username}.`);
+        
+        setModalContent(
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ color: 'var(--status-green)', fontWeight: 'bold' }}>✓ Success</p>
+            <p>User details updated successfully.</p>
+            <button className="btn-dark" onClick={closeModal} style={{ cursor: 'pointer' }}>Close</button>
+          </div>,
+          "User Updated"
+        );
+        openModal();
       } else {
         // Create User
         const newUser = {
@@ -1935,39 +3146,74 @@ export function UserManagementView({ state, navigateTo }) {
           name,
           role,
           department,
+          email,
+          phone,
           disabled: false,
           permissions: role === "Sub Admin" ? permissions : {}
         };
         const tempPassword = await apiService.createUser(newUser);
-        alert(`User created successfully!\n\nTemporary Password: ${tempPassword}\n\nShare this secure password with the user. They will be forced to change it on their first login.`);
+        
+        // Show in-app modal instead of browser alert()
+        setModalContent(
+          <div style={{ textAlign: 'left' }}>
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
+              <h4 style={{ color: '#16a34a', margin: 0, fontSize: '15px', fontWeight: 'bold' }}>✓ User Created Successfully!</h4>
+            </div>
+            <p style={{ fontSize: '13px', lineHeight: '1.5', color: 'var(--text-main)' }}>
+              Please share these temporary credentials with the employee. They will be forced to change their password upon their first login.
+            </p>
+            <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '14px', margin: '14px 0' }}>
+              <div style={{ marginBottom: '8px' }}><b>Username:</b> {username}</div>
+              <div style={{ marginBottom: '8px' }}><b>Temporary Password:</b> <code style={{ fontSize: '14px', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', color: '#dc2626', fontWeight: 'bold' }}>{tempPassword}</code></div>
+            </div>
+            <button className="btn-dark" onClick={closeModal} style={{ width: '100%', cursor: 'pointer' }}>Close</button>
+          </div>,
+          "Temporary Credentials"
+        );
+        openModal();
+
         state.logEvent("Created User Account", "None", username, `Main Admin created account for ${username} with role ${role}.`);
       }
 
       // Reset & Reload
+      setErrors({});
       setShowAddForm(false);
       setEditUser(null);
       setUsername("");
       setName("");
+      setEmail("");
+      setPhone("");
       setRole("Employee");
-      setDepartment("Kraft Mill");
+      setDepartment(activeDepts.length > 0 ? activeDepts[0].name : "");
       setPermissions({
         approve_requests: false,
         manage_suppliers: false,
         view_logs: false,
         edit_orders: false
       });
-      loadUsers();
+      loadUsersAndDepts();
     } catch (err) {
-      alert(err.message);
+      setModalContent(
+        <div style={{ textAlign: 'center' }}>
+          <p style={{ color: 'var(--status-red)', fontWeight: 'bold' }}>Error</p>
+          <p>{err.message || "Failed to save user account."}</p>
+          <button className="btn-dark" onClick={closeModal} style={{ cursor: 'pointer' }}>Close</button>
+        </div>,
+        "Error"
+      );
+      openModal();
     }
   };
 
   const handleEdit = (u) => {
+    setErrors({});
     setEditUser(u);
     setUsername(u.username);
     setName(u.name);
     setRole(u.role);
-    setDepartment(u.department || "Kraft Mill");
+    setDepartment(u.department || (activeDepts.length > 0 ? activeDepts[0].name : ""));
+    setEmail(u.email || "");
+    setPhone(u.phone || "");
     setPermissions(u.permissions || {
       approve_requests: false,
       manage_suppliers: false,
@@ -1979,7 +3225,15 @@ export function UserManagementView({ state, navigateTo }) {
 
   const handleToggleDisable = async (u) => {
     if (u.role === "Main Admin") {
-      alert("Main Admin cannot be disabled");
+      setModalContent(
+        <div style={{ textAlign: 'center' }}>
+          <p style={{ color: 'var(--status-red)', fontWeight: 'bold' }}>Constraint</p>
+          <p>Main Admin cannot be disabled.</p>
+          <button className="btn-dark" onClick={closeModal} style={{ cursor: 'pointer' }}>Close</button>
+        </div>,
+        "Constraint Alert"
+      );
+      openModal();
       return;
     }
     const updated = {
@@ -1988,20 +3242,140 @@ export function UserManagementView({ state, navigateTo }) {
     };
     await apiService.saveUser(updated);
     state.logEvent(u.disabled ? "Enabled User Account" : "Disabled User Account", u.username, u.username, `Main Admin toggled account state.`);
-    loadUsers();
+    loadUsersAndDepts();
   };
 
-  const handleResetPassword = async (u) => {
-    const confirmReset = window.confirm(`Are you sure you want to reset password for ${u.name}?`);
-    if (!confirmReset) return;
-    
-    try {
-      const tempPass = await apiService.resetUserPassword(u.id);
-      alert(`Password reset successful!\n\nNew Temporary Password: ${tempPass}\n\nUser will be forced to change it on their next login.`);
-      state.logEvent("Reset User Password", u.username, u.username, `Main Admin reset password for ${u.username}.`);
-    } catch (err) {
-      alert(err.message);
-    }
+  const handleResetPassword = (u) => {
+    let customPassword = "";
+
+    const handleConfirmReset = async () => {
+      if (!customPassword.trim()) {
+        state.showToast("Validation Error", "Please enter a valid password.", "success");
+        return;
+      }
+      try {
+        await apiService.resetUserPassword(u.id, customPassword);
+        state.logEvent("Reset User Password", u.username, u.username, `Main Admin reset password for ${u.username}.`);
+        
+        state.showToast("Success", `Password for ${u.name} has been reset successfully. They will be required to change it on their next login.`, "success");
+        closeModal();
+      } catch (err) {
+        state.showToast("Error", err.message || "Failed to reset password.", "success");
+      }
+    };
+
+    setModalContent(
+      <div style={{ textAlign: 'left' }}>
+        <p style={{ fontSize: '13px', marginBottom: '16px' }}>
+          Enter the new custom password for <b>{u.name}</b>. This will force them to change it on their next login.
+        </p>
+        <div className="form-group" style={{ marginBottom: '16px' }}>
+          <label>New Password</label>
+          <input 
+            type="text" 
+            className="form-control" 
+            placeholder="Enter custom password..." 
+            onChange={e => { customPassword = e.target.value; }} 
+            style={{ cursor: 'text' }}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button 
+            className="btn-dark" 
+            style={{ flex: 1, backgroundColor: '#9ca3af', marginBottom: 0, cursor: 'pointer' }} 
+            onClick={closeModal}
+          >
+            Cancel
+          </button>
+          <button 
+            className="btn-orange" 
+            style={{ flex: 1.5, cursor: 'pointer' }}
+            onClick={handleConfirmReset}
+          >
+            Reset Password
+          </button>
+        </div>
+      </div>,
+      "Reset Password"
+    );
+    openModal();
+  };
+
+  const renderUserForm = () => {
+    return (
+      <form onSubmit={handleSave}>
+        <div className="form-group">
+          <label>Username</label>
+          <input type="text" className="form-control" value={username} onChange={e => setUsername(e.target.value)} disabled={!!editUser} required style={{ cursor: editUser ? 'not-allowed' : 'text', border: errors.username ? '1.5px solid var(--status-red)' : '1px solid var(--border-color)' }} />
+          {errors.username && <div style={{ color: 'var(--status-red)', fontSize: '11px', marginTop: '4px', textAlign: 'left' }}>{errors.username}</div>}
+        </div>
+
+        <div className="form-group">
+          <label>Full Name</label>
+          <input type="text" className="form-control" value={name} onChange={e => { setName(e.target.value); validateUserField("name", e.target.value); }} required style={{ cursor: 'text', border: errors.name ? '1.5px solid var(--status-red)' : '1px solid var(--border-color)' }} />
+          {errors.name && <div style={{ color: 'var(--status-red)', fontSize: '11px', marginTop: '4px', textAlign: 'left' }}>{errors.name}</div>}
+        </div>
+
+        <div className="form-group">
+          <label>Email Address</label>
+          <input type="email" className="form-control" placeholder="e.g. employee@company.com" value={email} onChange={e => { setEmail(e.target.value); validateUserField("email", e.target.value); }} required style={{ cursor: 'text', border: errors.email ? '1.5px solid var(--status-red)' : '1px solid var(--border-color)' }} />
+          {errors.email && <div style={{ color: 'var(--status-red)', fontSize: '11px', marginTop: '4px', textAlign: 'left' }}>{errors.email}</div>}
+        </div>
+
+        <div className="form-group">
+          <label>Phone Number</label>
+          <input type="tel" className="form-control" placeholder="e.g. 9876543210 or +919876543210" value={phone} onChange={e => { setPhone(e.target.value); validateUserField("phone", e.target.value); }} required style={{ cursor: 'text', border: errors.phone ? '1.5px solid var(--status-red)' : '1px solid var(--border-color)' }} />
+          {errors.phone && <div style={{ color: 'var(--status-red)', fontSize: '11px', marginTop: '4px', textAlign: 'left' }}>{errors.phone}</div>}
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label>Role</label>
+            <select className="form-control" value={role} onChange={e => setRole(e.target.value)} style={{ cursor: 'pointer' }}>
+              <option value="Employee">Employee</option>
+              <option value="Sub Admin">Sub Admin</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Department</label>
+            <select className="form-control" value={department} onChange={e => setDepartment(e.target.value)} style={{ cursor: 'pointer' }}>
+              {activeDepts.map(d => (
+                <option key={d.name} value={d.name}>{d.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {role === "Sub Admin" && (
+          <div style={{ marginTop: '16px', marginBottom: '16px' }}>
+            <label style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Configurable Permissions</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                <input type="checkbox" checked={permissions.approve_requests} onChange={() => handleTogglePerm('approve_requests')} style={{ cursor: 'pointer', width: '18px', height: '18px' }} />
+                <span>Can Approve Requests</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                <input type="checkbox" checked={permissions.manage_suppliers} onChange={() => handleTogglePerm('manage_suppliers')} style={{ cursor: 'pointer', width: '18px', height: '18px' }} />
+                <span>Can Manage Suppliers</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                <input type="checkbox" checked={permissions.view_logs} onChange={() => handleTogglePerm('view_logs')} style={{ cursor: 'pointer', width: '18px', height: '18px' }} />
+                <span>Can View Audit Logs</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                <input type="checkbox" checked={permissions.edit_orders} onChange={() => handleTogglePerm('edit_orders')} style={{ cursor: 'pointer', width: '18px', height: '18px' }} />
+                <span>Can Edit Order Timelines</span>
+              </label>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+          <button type="button" className="btn-dark" style={{ flex: 1, backgroundColor: '#9ca3af', marginBottom: 0 }} onClick={() => { setShowAddForm(false); setEditUser(null); }}>Cancel</button>
+          <button type="submit" className="btn-orange" style={{ flex: 1.5 }}>Save Account</button>
+        </div>
+      </form>
+    );
   };
 
   return (
@@ -2015,11 +3389,14 @@ export function UserManagementView({ state, navigateTo }) {
         </div>
         <div className="header-right">
           <button className="btn-orange" style={{ padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }} onClick={() => {
+            setErrors({});
             setEditUser(null);
             setUsername("");
             setName("");
             setRole("Employee");
-            setDepartment("Kraft Mill");
+            setDepartment(activeDepts.length > 0 ? activeDepts[0].name : "");
+            setEmail("");
+            setPhone("");
             setPermissions({
               approve_requests: false,
               manage_suppliers: false,
@@ -2034,92 +3411,116 @@ export function UserManagementView({ state, navigateTo }) {
       </header>
 
       <div style={{ paddingTop: '10px' }}>
-        {showAddForm ? (
+        {showAddForm && !editUser ? (
           <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-md)', padding: '20px', textAlign: 'left', marginBottom: '20px' }}>
             <h3 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '16px' }}>
-              {editUser ? 'Edit User Details' : 'Create New Account'}
+              Create New Account
             </h3>
-            
-            <form onSubmit={handleSave}>
-              <div className="form-group">
-                <label>Username</label>
-                <input type="text" className="form-control" value={username} onChange={e => setUsername(e.target.value)} disabled={!!editUser} required style={{ cursor: editUser ? 'not-allowed' : 'text' }} />
-              </div>
-
-              <div className="form-group">
-                <label>Full Name</label>
-                <input type="text" className="form-control" value={name} onChange={e => setName(e.target.value)} required style={{ cursor: 'text' }} />
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Role</label>
-                  <select className="form-control" value={role} onChange={e => setRole(e.target.value)} style={{ cursor: 'pointer' }}>
-                    <option value="Employee">Employee</option>
-                    <option value="Sub Admin">Sub Admin</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label>Department</label>
-                  <input type="text" className="form-control" value={department} onChange={e => setDepartment(e.target.value)} style={{ cursor: 'text' }} />
-                </div>
-              </div>
-
-              {role === "Sub Admin" && (
-                <div style={{ marginTop: '16px', marginBottom: '16px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Configurable Permissions</label>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
-                      <input type="checkbox" checked={permissions.approve_requests} onChange={() => handleTogglePerm('approve_requests')} style={{ cursor: 'pointer', width: '18px', height: '18px' }} />
-                      <span>Can Approve Requests</span>
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
-                      <input type="checkbox" checked={permissions.manage_suppliers} onChange={() => handleTogglePerm('manage_suppliers')} style={{ cursor: 'pointer', width: '18px', height: '18px' }} />
-                      <span>Can Manage Suppliers</span>
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
-                      <input type="checkbox" checked={permissions.view_logs} onChange={() => handleTogglePerm('view_logs')} style={{ cursor: 'pointer', width: '18px', height: '18px' }} />
-                      <span>Can View Audit Logs</span>
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
-                      <input type="checkbox" checked={permissions.edit_orders} onChange={() => handleTogglePerm('edit_orders')} style={{ cursor: 'pointer', width: '18px', height: '18px' }} />
-                      <span>Can Edit Order Timelines</span>
-                    </label>
-                  </div>
-                </div>
-              )}
-
-              <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
-                <button type="button" className="btn-dark" style={{ flex: 1, backgroundColor: '#9ca3af', marginBottom: 0 }} onClick={() => setShowAddForm(false)}>Cancel</button>
-                <button type="submit" className="btn-orange" style={{ flex: 1.5 }}>Save Account</button>
-              </div>
-            </form>
+            {renderUserForm()}
           </div>
         ) : null}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {users.map(u => (
-            <div key={u.id} style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-md)', padding: '16px', textAlign: 'left', opacity: u.disabled ? 0.6 : 1 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <UserAvatar user={u} size={40} />
-                  <div>
-                    <div style={{ fontWeight: '800', fontSize: '14px' }}>{u.name}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>@{u.username} • {u.role} ({u.department || 'N/A'})</div>
+          {users.filter(u => u.role !== "Main Admin").map(u => {
+            const isEditingThisUser = editUser && editUser.id === u.id;
+            return (
+              <div key={u.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-md)', padding: '16px', textAlign: 'left', opacity: u.disabled ? 0.6 : 1 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <UserAvatar user={u} size={40} />
+                      <div>
+                        <div style={{ fontWeight: '800', fontSize: '14px' }}>{u.name}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>@{u.username} • {u.role} ({u.department || 'N/A'})</div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', flexShrink: 0, alignItems: 'center' }}>
+                      <button 
+                        className="btn-outlined-icon-edit"
+                        onClick={() => handleEdit(u)} 
+                        style={{ 
+                          backgroundColor: 'transparent', 
+                          color: 'var(--primary-orange)', 
+                          border: '1px solid var(--primary-orange)', 
+                          borderRadius: '6px', 
+                          padding: '4px 8px', 
+                          fontSize: '11px', 
+                          fontWeight: '700', 
+                          cursor: 'pointer', 
+                          display: 'inline-flex', 
+                          alignItems: 'center', 
+                          gap: '4px', 
+                          height: '26px', 
+                          transition: 'all 0.2s' 
+                        }}
+                        title="Edit User Details"
+                      >
+                        <Icons.Edit />
+                        <span>Edit</span>
+                      </button>
+                      {u.role !== "Main Admin" && (
+                        <button 
+                          className={u.disabled ? "btn-outlined-icon-power-green" : "btn-outlined-icon-power-red"}
+                          onClick={() => handleToggleDisable(u)} 
+                          style={{ 
+                            backgroundColor: 'transparent', 
+                            color: u.disabled ? 'var(--status-green)' : 'var(--status-red)', 
+                            border: u.disabled ? '1px solid var(--status-green)' : '1px solid var(--status-red)', 
+                            borderRadius: '6px', 
+                            padding: '4px 8px', 
+                            fontSize: '11px', 
+                            fontWeight: '700', 
+                            cursor: 'pointer', 
+                            display: 'inline-flex', 
+                            alignItems: 'center', 
+                            gap: '4px', 
+                            height: '26px', 
+                            transition: 'all 0.2s' 
+                          }}
+                          title={u.disabled ? "Enable Account" : "Disable Account"}
+                        >
+                          <Icons.Power />
+                          <span>{u.disabled ? 'Enable' : 'Disable'}</span>
+                        </button>
+                      )}
+                      <button 
+                        className="btn-outlined-icon-key"
+                        onClick={() => handleResetPassword(u)} 
+                        style={{ 
+                          backgroundColor: 'transparent', 
+                          color: 'var(--text-main)', 
+                          border: '1px solid var(--text-main)', 
+                          borderRadius: '6px', 
+                          padding: '4px 8px', 
+                          fontSize: '11px', 
+                          fontWeight: '700', 
+                          cursor: 'pointer', 
+                          display: 'inline-flex', 
+                          alignItems: 'center', 
+                          gap: '4px', 
+                          height: '26px', 
+                          transition: 'all 0.2s' 
+                        }}
+                        title="Reset Password"
+                      >
+                        <Icons.Key />
+                        <span>Reset Pass</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button className="badge-view-details" onClick={() => handleEdit(u)} style={{ backgroundColor: 'var(--primary-orange)', cursor: 'pointer' }}>Edit</button>
-                  {u.role !== "Main Admin" && (
-                    <button className="badge-view-details" onClick={() => handleToggleDisable(u)} style={{ backgroundColor: u.disabled ? 'var(--status-green)' : 'var(--status-red)', cursor: 'pointer' }}>
-                      {u.disabled ? 'Enable' : 'Disable'}
-                    </button>
-                  )}
-                  <button className="badge-view-details" onClick={() => handleResetPassword(u)} style={{ backgroundColor: 'var(--text-main)', cursor: 'pointer' }}>Reset Pass</button>
-                </div>
+
+                {isEditingThisUser && (
+                  <div style={{ background: 'var(--card-bg)', border: '2px solid var(--primary-orange)', borderRadius: 'var(--border-radius-md)', padding: '20px', textAlign: 'left', marginTop: '-4px', marginBottom: '12px', boxShadow: 'var(--shadow-md)' }}>
+                    <h3 style={{ fontSize: '15px', fontWeight: '800', marginBottom: '14px', color: 'var(--primary-orange)' }}>
+                      Edit User Details: {u.name}
+                    </h3>
+                    {renderUserForm()}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
@@ -2134,7 +3535,7 @@ export function UserAvatar({ user, size = 40 }) {
   
   if (user.avatar && user.avatar.startsWith("data:")) {
     return (
-      <img src={user.avatar} style={{ width: `${size}px`, height: `${size}px`, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid var(--border-color)' }} alt="Avatar" />
+      <img src={user.avatar} style={{ width: `${size}px`, height: `${size}px`, borderRadius: '50%', objectFit: 'cover', border: '1.5px solid var(--border-color)', flexShrink: 0 }} alt="Avatar" />
     );
   }
 
@@ -2164,7 +3565,8 @@ export function UserAvatar({ user, size = 40 }) {
       fontWeight: 'bold',
       fontSize: `${size * 0.4}px`,
       border: '1.5px solid var(--border-color)',
-      userSelect: 'none'
+      userSelect: 'none',
+      flexShrink: 0
     }}>
       {initials}
     </div>
@@ -2249,7 +3651,7 @@ export function AutomationPanel({ state, navigateTo }) {
 
   const handleApplyBranding = () => {
     if (!appName || !logoText || !companyName) {
-      alert("App name, Logo, and Company are required.");
+      state.showToast("Required Fields", "App name, Logo, and Company are required.", "success");
       return;
     }
 
@@ -2266,7 +3668,7 @@ export function AutomationPanel({ state, navigateTo }) {
     state.updateBranding(updated);
     localStorage.setItem("pms_api_base_url", apiBaseUrl);
     state.logEvent("Updated Branding & Webhook Settings", "Custom config", appName, `Branding updated: ${appName}. Webhook URL: ${apiBaseUrl}`);
-    alert("Branding settings saved successfully.");
+    state.showToast("Success", "Branding settings saved successfully.", "success");
     navigateTo('#settings');
   };
 
@@ -2320,6 +3722,141 @@ export function AutomationPanel({ state, navigateTo }) {
 
         <div style={{ background: '#fff', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '12px', fontSize: '12px', lineHeight: '1.4', marginTop: '12px', textAlign: 'left' }}>
           <b>💡 System Note:</b> Setting a target API URL switches requests from simulated state storage to live endpoints.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------
+// DEPARTMENT MANAGEMENT VIEW COMPONENT
+// ----------------------------------------------------
+export function DepartmentManagementView({ state, navigateTo, openModal, closeModal, setModalContent }) {
+  const [departments, setDepartments] = useState([]);
+  const [newDeptName, setNewDeptName] = useState("");
+  const [renameValue, setRenameValue] = useState("");
+  const [editingDept, setEditingDept] = useState(null);
+
+  const loadDepartments = async () => {
+    const list = await apiService.getDepartments();
+    setDepartments(list);
+  };
+
+  useEffect(() => {
+    loadDepartments();
+  }, []);
+
+  const handleAdd = async (e) => {
+    e.preventDefault();
+    if (!newDeptName.trim()) return;
+    try {
+      await apiService.addDepartment(newDeptName);
+      setNewDeptName("");
+      loadDepartments();
+      state.showToast("Success", "Department added successfully.", "success");
+    } catch (err) {
+      state.showToast("Error", err.message, "success");
+    }
+  };
+
+  const handleRenameSubmit = async (e) => {
+    e.preventDefault();
+    if (!editingDept || !renameValue.trim()) return;
+    try {
+      await apiService.renameDepartment(editingDept.name, renameValue);
+      setEditingDept(null);
+      setRenameValue("");
+      loadDepartments();
+      state.showToast("Success", "Department renamed successfully.", "success");
+    } catch (err) {
+      state.showToast("Error", err.message, "success");
+    }
+  };
+
+  const handleToggleDisable = async (dept) => {
+    try {
+      await apiService.toggleDepartmentDisabled(dept.name);
+      loadDepartments();
+      state.showToast("Success", dept.disabled ? "Department enabled." : "Department disabled.", "success");
+    } catch (err) {
+      state.showToast("Error", err.message, "success");
+    }
+  };
+
+  return (
+    <div>
+      <header className="app-header">
+        <div className="header-left">
+          <button className="back-btn" onClick={() => navigateTo('#settings')} style={{ cursor: 'pointer' }}>
+            <Icons.Back />
+          </button>
+          <h1 style={{ fontSize: '18px' }}>Departments</h1>
+        </div>
+      </header>
+
+      <div style={{ paddingTop: '10px', textAlign: 'left', paddingBottom: '80px' }}>
+        {/* Add Form */}
+        <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-md)', padding: '16px', marginBottom: '20px' }}>
+          <h3 style={{ fontSize: '14px', fontWeight: '800', marginBottom: '12px' }}>Add New Department</h3>
+          <form onSubmit={handleAdd} style={{ display: 'flex', gap: '10px' }}>
+            <input 
+              type="text" 
+              className="form-control" 
+              placeholder="e.g. Finance" 
+              value={newDeptName} 
+              onChange={e => setNewDeptName(e.target.value)} 
+              required 
+              style={{ cursor: 'text', flex: 1 }} 
+            />
+            <button type="submit" className="btn-orange" style={{ width: 'auto', padding: '0 16px' }}>Add</button>
+          </form>
+        </div>
+
+        {/* Rename Modal replacement overlay */}
+        {editingDept && (
+          <div style={{ background: 'var(--card-bg)', border: '2px solid var(--primary-orange)', borderRadius: 'var(--border-radius-md)', padding: '16px', marginBottom: '20px' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: '800', marginBottom: '12px' }}>Rename: {editingDept.name}</h3>
+            <form onSubmit={handleRenameSubmit} style={{ display: 'flex', gap: '10px' }}>
+              <input 
+                type="text" 
+                className="form-control" 
+                value={renameValue} 
+                onChange={e => setRenameValue(e.target.value)} 
+                required 
+                style={{ cursor: 'text', flex: 1 }} 
+              />
+              <button type="button" className="btn-dark" onClick={() => setEditingDept(null)} style={{ width: 'auto', padding: '0 12px', marginBottom: 0 }}>Cancel</button>
+              <button type="submit" className="btn-orange" style={{ width: 'auto', padding: '0 16px' }}>Save</button>
+            </form>
+          </div>
+        )}
+
+        {/* List of Departments */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {departments.map((dept, idx) => (
+            <div key={idx} style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-md)', padding: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: dept.disabled ? 0.6 : 1 }}>
+              <div>
+                <div style={{ fontWeight: '700', fontSize: '14px' }}>{dept.name}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Status: {dept.disabled ? '🔴 Disabled' : '🟢 Active'}</div>
+              </div>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button 
+                  className="btn-outlined-icon-edit"
+                  onClick={() => { setEditingDept(dept); setRenameValue(dept.name); }}
+                  style={{ backgroundColor: 'transparent', color: 'var(--primary-orange)', border: '1px solid var(--primary-orange)', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', height: '26px' }}
+                >
+                  Rename
+                </button>
+                <button 
+                  className={dept.disabled ? "btn-outlined-icon-power-green" : "btn-outlined-icon-power-red"}
+                  onClick={() => handleToggleDisable(dept)}
+                  style={{ backgroundColor: 'transparent', color: dept.disabled ? 'var(--status-green)' : 'var(--status-red)', border: dept.disabled ? '1px solid var(--status-green)' : '1px solid var(--status-red)', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', height: '26px' }}
+                >
+                  {dept.disabled ? 'Enable' : 'Disable'}
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

@@ -5,8 +5,17 @@ html, body, #root {
   width: 100vw;
   height: 100vh;
   box-sizing: border-box;
+  background-color: #121212;
 }
 
 *, *:before, *:after {
   box-sizing: inherit;
+}
+
+.app-frame-wrapper, .device-frame {
+  background: linear-gradient(180deg, #EFE3DB 0%, #EFE8E7 100%) !important;
+}
+
+.modal-sheet {
+  background-color: #ffffff !important;
 }

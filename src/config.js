@@ -43,6 +43,7 @@ export const CONFIG = {
       email: "orders@abcompany.com",
       address: "12, Industrial Estate, Phase II, Chennai - 600032",
       products: "chain wheel, bearings, conveyor belt, sprocket",
+      rating: 5,
       remarks: "Preferred supplier for heavy mechanical transmission spares. Fast response."
     },
     {
@@ -54,6 +55,7 @@ export const CONFIG = {
       email: "sales@velauto.com",
       address: "87-A, Bypass Road, Madurai - 625016",
       products: "lubricant grease, V-belts, gear oil, sensor probe",
+      rating: 4,
       remarks: "Reliable supplier for machinery consumables and electrical components."
     },
     {
@@ -65,6 +67,7 @@ export const CONFIG = {
       email: "senthilfitter@gmail.com",
       address: "44, Mill Road, Coimbatore - 641002",
       products: "steam pipe valve, flange, coupling, custom piping fabrication",
+      rating: 3,
       remarks: "Specialist for structural and custom piping fabrication. High quality, moderate lead time."
     },
     {
@@ -76,6 +79,7 @@ export const CONFIG = {
       email: "contact@green1materials.com",
       address: "#34, Car Street, City Park, Honk Kong",
       products: "Desktop furniture, plumbing and electrical services, Water tank repair works",
+      rating: 4,
       remarks: "International supplier for structural office equipment and maintenance services."
     }
   ],
