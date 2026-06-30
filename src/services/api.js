@@ -3,6 +3,32 @@
 
 import { CONFIG } from '../config';
 
+// Date difference utility in days
+export const getDaysDifference = (dateStr1, dateStr2) => {
+  try {
+    const d1 = new Date(dateStr1);
+    const d2 = new Date(dateStr2);
+    d1.setHours(0,0,0,0);
+    d2.setHours(0,0,0,0);
+    const diffTime = d1 - d2;
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  } catch (e) {
+    return 0;
+  }
+};
+
+// Delay start date utility (the day after due date)
+export const getDelayStartDate = (dueDateStr) => {
+  try {
+    const d = new Date(dueDateStr);
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  } catch (e) {
+    return dueDateStr;
+  }
+};
+
 // Load API base URL from localStorage configuration
 const getApiBaseUrl = () => {
   return localStorage.getItem("pms_api_base_url") || "";
@@ -136,20 +162,35 @@ export const apiService = {
     const todayStr = new Date().toLocaleDateString('en-CA'); // Format: yyyy-mm-dd
     let changed = false;
     const updated = requests.map(r => {
-      if (r.dueDate && r.status !== "Delivered" && r.status !== "Rejected" && r.status !== "Cancelled" && r.status !== "Delayed") {
-        if (r.dueDate < todayStr) {
+      const isOverdue = r.dueDate && r.dueDate < todayStr;
+      const isNotCompleted = r.status !== "Delivered" && r.status !== "Rejected" && r.status !== "Cancelled";
+
+      if (isOverdue && isNotCompleted) {
+        const days = getDaysDifference(todayStr, r.dueDate);
+        const delayStart = r.delayStartDate || getDelayStartDate(r.dueDate);
+
+        if (r.status !== "Delayed") {
           changed = true;
           const updatedHistory = [...(r.history || []), {
             status: "Delayed",
             updatedBy: "System",
             role: "Automated",
             timestamp: new Date().toISOString(),
-            remarks: `Order automatically flagged as Delayed. Due date (${r.dueDate}) has passed.`
+            remarks: `Order automatically flagged as Delayed. Due date (${r.dueDate}) has passed. Overdue: ${days} days.`
           }];
           return {
             ...r,
             status: "Delayed",
+            delayedStatus: true,
+            delayStartDate: delayStart,
+            delayedDays: days,
             history: updatedHistory
+          };
+        } else if (r.delayedDays !== days) {
+          changed = true;
+          return {
+            ...r,
+            delayedDays: days
           };
         }
       }
@@ -185,6 +226,43 @@ export const apiService = {
 
   async updateRequest(requestId, updatedRequest) {
     const baseUrl = getApiBaseUrl();
+    
+    // Check if the order is being marked as Delivered
+    if (updatedRequest.status === "Delivered") {
+      const wasDelayed = updatedRequest.delayedStatus === true || 
+                         (updatedRequest.history && updatedRequest.history.some(h => h.status === "Delayed"));
+      
+      const todayStr = new Date().toLocaleDateString('en-CA');
+      const isOverdue = updatedRequest.dueDate && updatedRequest.dueDate < todayStr;
+
+      if (wasDelayed || isOverdue) {
+        updatedRequest.delayedStatus = true;
+        if (!updatedRequest.actualDeliveryDate) {
+          updatedRequest.actualDeliveryDate = new Date().toISOString();
+        }
+        
+        const deliveryDateStr = updatedRequest.actualDeliveryDate.split('T')[0];
+        const days = getDaysDifference(deliveryDateStr, updatedRequest.dueDate);
+        updatedRequest.delayedDays = days > 0 ? days : updatedRequest.delayedDays || 0;
+        
+        // Find the "Delivered" history entry and update its remarks with the note
+        if (updatedRequest.history && updatedRequest.history.length > 0) {
+          const lastEntryIdx = updatedRequest.history.length - 1;
+          const lastEntry = updatedRequest.history[lastEntryIdx];
+          if (lastEntry.status === "Delivered") {
+            const note = `Delivered ${updatedRequest.delayedDays} days after the Due Date.`;
+            if (lastEntry.remarks) {
+              if (!lastEntry.remarks.includes("after the Due Date")) {
+                lastEntry.remarks = `${lastEntry.remarks} (${note})`;
+              }
+            } else {
+              lastEntry.remarks = note;
+            }
+          }
+        }
+      }
+    }
+
     if (baseUrl) {
       const res = await fetch(`${baseUrl}/requests/${requestId}`, {
         method: "PUT",

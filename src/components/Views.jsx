@@ -1482,7 +1482,14 @@ export function LiveOrdersView({ state, navigateTo }) {
 
                 <div className="card-status-line">
                   <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>{req.id}</span>
-                  <span className={`status-badge ${req.status.toLowerCase().replace(/ /g, '')}`}>{req.status}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {req.delayedStatus && req.status === "Delayed" && (
+                      <span style={{ color: 'var(--status-red)', fontWeight: 'bold', fontSize: '12px' }}>
+                        ⚠️ {req.delayedDays} Days Overdue
+                      </span>
+                    )}
+                    <span className={`status-badge ${req.status.toLowerCase().replace(/ /g, '')}`}>{req.status}</span>
+                  </div>
                 </div>
               </div>
             );
@@ -1498,11 +1505,11 @@ export function LiveOrdersView({ state, navigateTo }) {
 // ----------------------------------------------------
 export function OrderDetailsView({ state, navigateTo, requestId, addNotification, openModal, closeModal, setModalContent }) {
   const req = state.requests.find(r => r.id === requestId);
-  if (!req) return <p style={{ padding: '20px' }}>Order not found</p>;
-
   const [newComment, setNewComment] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
   const [selectedFileName, setSelectedFileName] = useState("");
+
+  if (!req) return <p style={{ padding: '20px' }}>Order not found</p>;
 
   const handleSendComment = async (e) => {
     e.preventDefault();
@@ -1533,14 +1540,28 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
   const dateStr = new Date(req.date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
   const timeStr = new Date(req.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
+  const getLogisticsStatus = (r) => {
+    const sequence = ["Pending", "Approved", "Booked", "Acknowledged", "Picked", "In Transit", "LR Copy Received", "Reached Warehouse", "Delivered"];
+    if (sequence.includes(r.status)) return r.status;
+    if (r.history) {
+      for (let i = r.history.length - 1; i >= 0; i--) {
+        if (sequence.includes(r.history[i].status)) {
+          return r.history[i].status;
+        }
+      }
+    }
+    return "Pending";
+  };
+
+  const logisticsStatus = getLogisticsStatus(req);
   const trackingStages = ["Picked", "In Transit", "Reached Warehouse", "Delivered"];
-  const currentStageIdx = trackingStages.indexOf(req.status);
+  const currentStageIdx = trackingStages.indexOf(logisticsStatus);
 
   let progressWidth = 0;
-  if (req.status === "Picked") progressWidth = 0;
-  else if (req.status === "In Transit" || req.status === "LR Copy Received") progressWidth = 33;
-  else if (req.status === "Reached Warehouse") progressWidth = 66;
-  else if (req.status === "Delivered") progressWidth = 100;
+  if (logisticsStatus === "Picked") progressWidth = 0;
+  else if (logisticsStatus === "In Transit" || logisticsStatus === "LR Copy Received") progressWidth = 33;
+  else if (logisticsStatus === "Reached Warehouse") progressWidth = 66;
+  else if (logisticsStatus === "Delivered") progressWidth = 100;
 
   const handleStatusChange = async (newStatus, remarks = "") => {
     if (!newStatus) return;
@@ -1795,6 +1816,54 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
             <div style={{ fontSize: '20px', fontWeight: '800', marginTop: '4px', color: '#ffffff' }}>{req.status}</div>
           </div>
           <span className={`status-badge ${req.status.toLowerCase().replace(/ /g, '')}`} style={{ padding: '8px 16px', fontSize: '13px', fontWeight: 'bold' }}>{req.status}</span>
+        </div>
+
+        {/* Overdue/Delay alert boxes */}
+        {req.delayedStatus && req.status === "Delayed" && (
+          <div style={{ background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '12px', padding: '16px', marginBottom: '20px', textAlign: 'left', color: '#b91c1c', fontSize: '13px', boxShadow: 'var(--shadow-sm)' }}>
+            <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px' }}>
+              ⚠️ Order is Delayed ({req.delayedDays} Days Overdue)
+            </div>
+            <div style={{ fontSize: '12px', color: '#ef4444', marginTop: '6px', lineHeight: '1.4' }}>
+              Due Date was <b>{new Date(req.dueDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</b>.
+              <br />
+              Delay automatically detected. Delay started on <b>{new Date(req.delayStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</b>.
+            </div>
+          </div>
+        )}
+
+        {req.delayedStatus && req.status === "Delivered" && (
+          <div style={{ background: '#fffbeb', border: '1.5px solid #fef3c7', borderRadius: '12px', padding: '16px', marginBottom: '20px', textAlign: 'left', color: '#b45309', fontSize: '13px', boxShadow: 'var(--shadow-sm)' }}>
+            <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px' }}>
+              ⚠️ Delivered after Delay ({req.delayedDays} day(s) late)
+            </div>
+            <div style={{ fontSize: '12px', color: '#d97706', marginTop: '6px', lineHeight: '1.4' }}>
+              Delivered <b>{req.delayedDays} day(s) after the Due Date</b>.
+              <br />
+              Due Date: <b>{new Date(req.dueDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</b>
+              <br />
+              Actual Delivery Date: <b>{new Date(req.actualDeliveryDate).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</b>
+            </div>
+          </div>
+        )}
+
+        {/* Horizontal Timeline Progress Widget */}
+        <div className="timeline-container" style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '20px', marginBottom: '20px' }}>
+          <div className="timeline">
+            <div style={{ position: 'absolute', top: '15px', left: '20px', right: '20px', height: '4px', zIndex: 2 }}>
+              <div style={{ width: `${progressWidth}%`, height: '100%', backgroundColor: 'var(--status-green)', transition: 'width 0.4s ease' }}></div>
+            </div>
+            {trackingStages.map((stage, idx) => {
+              const isActive = stage === logisticsStatus;
+              const isCompleted = trackingStages.indexOf(logisticsStatus) >= idx;
+              return (
+                <div key={stage} className={`timeline-step ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}>
+                  <div className="timeline-dot">{idx + 1}</div>
+                  <div className="timeline-label">{stage}</div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
@@ -2751,7 +2820,14 @@ export function OrderHistoryView({ state, navigateTo }) {
 
                 <div className="card-status-line">
                   <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>{req.id}</span>
-                  <span className={`status-badge ${req.status.toLowerCase().replace(/ /g, '')}`}>{req.status}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {req.delayedStatus && (
+                      <span style={{ color: '#b45309', fontWeight: '700', fontSize: '11px', background: '#fffbeb', border: '1px solid #fef3c7', padding: '2px 6px', borderRadius: '4px' }}>
+                        ⚠️ Delayed Delivery ({req.delayedDays}d)
+                      </span>
+                    )}
+                    <span className={`status-badge ${req.status.toLowerCase().replace(/ /g, '')}`}>{req.status}</span>
+                  </div>
                 </div>
               </div>
             );

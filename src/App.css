@@ -902,6 +902,11 @@ input.form-control, select.form-control {
   height: 44px;
 }
 
+select.form-control {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
 .form-control:focus {
   outline: none;
   border-color: var(--primary-orange);
@@ -1342,6 +1347,8 @@ input.form-control, select.form-control {
 .modal-title {
   font-size: 18px;
   font-weight: 800;
+  line-height: 1.4;
+  padding-bottom: 4px;
 }
 
 .modal-close {

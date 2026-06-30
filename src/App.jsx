@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 import { CONFIG } from './config';
-import { apiService } from './services/api';
+import { apiService, getDaysDifference, getDelayStartDate } from './services/api';
 import {
   HomeView,
   CreateRequestView,
@@ -22,6 +22,68 @@ import {
   Icons
 } from './components/Views';
 
+// Static overdue order classifier helper
+const checkOverdueOrdersStatic = (currentRequests, suppliersList) => {
+  const todayStr = new Date().toLocaleDateString('en-CA');
+  let changed = false;
+  const notificationsToTrigger = [];
+  const eventsToLog = [];
+
+  const updatedRequests = currentRequests.map(r => {
+    const isOverdue = r.dueDate && r.dueDate < todayStr;
+    const isNotCompleted = r.status !== "Delivered" && r.status !== "Rejected" && r.status !== "Cancelled";
+
+    if (isOverdue && isNotCompleted) {
+      const days = getDaysDifference(todayStr, r.dueDate);
+      const delayStart = r.delayStartDate || getDelayStartDate(r.dueDate);
+
+      if (r.status !== "Delayed") {
+        changed = true;
+        const supplier = suppliersList.find(s => s.id === r.supplierId) || { companyName: r.suggestedSupplier || "Not Assigned" };
+        
+        notificationsToTrigger.push({
+          title: `Delayed Order Alert: ${r.id}`,
+          body: `Order ${r.id} for "${r.productName}" from ${supplier.companyName} is overdue.\nDue Date: ${r.dueDate}\nOverdue: ${days} day(s).`,
+          role: "Both"
+        });
+
+        eventsToLog.push({
+          action: "Order Delayed Automatically",
+          prevStatus: r.status,
+          newStatus: "Delayed",
+          details: `Order ${r.id} is overdue by ${days} days.`
+        });
+
+        const updatedHistory = [...(r.history || []), {
+          status: "Delayed",
+          updatedBy: "System",
+          role: "Automated",
+          timestamp: new Date().toISOString(),
+          remarks: `Order automatically flagged as Delayed. Due date (${r.dueDate}) has passed. Overdue: ${days} days.`
+        }];
+
+        return {
+          ...r,
+          status: "Delayed",
+          delayedStatus: true,
+          delayStartDate: delayStart,
+          delayedDays: days,
+          history: updatedHistory
+        };
+      } else if (r.delayedDays !== days) {
+        changed = true;
+        return {
+          ...r,
+          delayedDays: days
+        };
+      }
+    }
+    return r;
+  });
+
+  return { updatedRequests, notificationsToTrigger, eventsToLog, changed };
+};
+
 export default function App() {
   // ----------------------------------------------------
   // GLOBAL STATE
@@ -41,7 +103,7 @@ export default function App() {
   const [notifications, setNotifications] = useState([]);
   const [webhookUrl, setWebhookUrl] = useState("");
   const [toasts, setToasts] = useState([]);
-  
+
   // User Session state
   const [currentUser, setCurrentUser] = useState(() => {
     try {
@@ -52,10 +114,10 @@ export default function App() {
     }
   });
   const [usersList, setUsersList] = useState([]);
-  
+
   // Navigation Router state
   const [currentHash, setCurrentHash] = useState(window.location.hash || '#home');
-  
+
   // Modal overlay state
   const [modalOpen, setModalOpen] = useState(false);
   const [modalContent, setModalContent] = useState(null);
@@ -98,7 +160,7 @@ export default function App() {
         const reqs = await apiService.getRequests();
         const sups = await apiService.getSuppliers();
         const auditLogs = await apiService.getLogs();
-        
+
         setRequests(reqs);
         setSuppliers(sups);
         setLogs(auditLogs);
@@ -171,6 +233,62 @@ export default function App() {
     document.title = branding.appName;
   }, [branding]);
 
+  // Automatic Overdue Orders Check & Sync Effect
+  useEffect(() => {
+    if (requests.length === 0 || suppliers.length === 0) return;
+
+    const { updatedRequests, notificationsToTrigger, eventsToLog, changed } = checkOverdueOrdersStatic(requests, suppliers);
+
+    if (changed) {
+      setRequests(updatedRequests);
+      
+      const baseUrl = localStorage.getItem("pms_api_base_url") || "";
+      if (!baseUrl) {
+        localStorage.setItem("pms_requests", JSON.stringify(updatedRequests));
+      }
+
+      notificationsToTrigger.forEach(n => {
+        addNotification(n.title, n.body, n.role);
+      });
+
+      eventsToLog.forEach(e => {
+        logEvent(e.action, e.prevStatus, e.newStatus, e.details);
+      });
+    }
+  }, [requests, suppliers]);
+
+  // Periodic Overdue Scan Interval
+  useEffect(() => {
+    if (suppliers.length === 0) return;
+
+    const scanInterval = setInterval(() => {
+      setRequests(prevRequests => {
+        if (prevRequests.length === 0) return prevRequests;
+        const { updatedRequests, notificationsToTrigger, eventsToLog, changed } = checkOverdueOrdersStatic(prevRequests, suppliers);
+        
+        if (changed) {
+          const baseUrl = localStorage.getItem("pms_api_base_url") || "";
+          if (!baseUrl) {
+            localStorage.setItem("pms_requests", JSON.stringify(updatedRequests));
+          }
+
+          notificationsToTrigger.forEach(n => {
+            addNotification(n.title, n.body, n.role);
+          });
+
+          eventsToLog.forEach(e => {
+            logEvent(e.action, e.prevStatus, e.newStatus, e.details);
+          });
+
+          return updatedRequests;
+        }
+        return prevRequests;
+      });
+    }, 10000); // Check every 10 seconds
+
+    return () => clearInterval(scanInterval);
+  }, [suppliers]);
+
   // ----------------------------------------------------
   // EVENT TRAIL LOGGER & WEBHOOK TRIGGERS
   // ----------------------------------------------------
@@ -192,7 +310,7 @@ export default function App() {
   const showToast = (title, body, type = 'info') => {
     const newToast = { id: Date.now(), title, body, type };
     setToasts(prev => [...prev, newToast]);
-    
+
     // Auto remove toast
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== newToast.id));
@@ -257,18 +375,18 @@ export default function App() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     })
-    .then(res => {
-      if (res.ok) {
-        showToast("Webhook Post Success (n8n)", `Fired JSON payload for event type "${eventType}".`, "info");
-        logEvent("Fired Automation Webhook", "None", "Success", `Sent JSON payload to webhook node: ${webhookUrl}`);
-      } else {
-        showToast("Webhook Status Alert", `n8n webhook endpoint returned code: ${res.status}`, "success");
-      }
-    })
-    .catch(err => {
-      console.error(err);
-      showToast("Webhook Failure", "Connection failed. Check n8n webhook URL configuration.", "success");
-    });
+      .then(res => {
+        if (res.ok) {
+          showToast("Webhook Post Success (n8n)", `Fired JSON payload for event type "${eventType}".`, "info");
+          logEvent("Fired Automation Webhook", "None", "Success", `Sent JSON payload to webhook node: ${webhookUrl}`);
+        } else {
+          showToast("Webhook Status Alert", `n8n webhook endpoint returned code: ${res.status}`, "success");
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        showToast("Webhook Failure", "Connection failed. Check n8n webhook URL configuration.", "success");
+      });
   };
 
   const handleManualWebhookTrigger = (eventKey) => {
@@ -286,7 +404,7 @@ export default function App() {
   const initWhatsAppThread = (requestId, outgoingText) => {
     const req = requests.find(r => r.id === requestId);
     const supplier = suppliers.find(s => s.id === req.supplierId) || {};
-    
+
     setChatThread({
       requestId,
       supplierName: supplier.companyName,
@@ -488,10 +606,10 @@ export default function App() {
     const path = currentHash.split('?')[0];
 
     const tabs = [
-      { path: '#home', label: 'Home', icon: <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> },
-      { path: isAdmin ? '#requested-orders' : '#create-request', label: isAdmin ? 'Approvals' : 'Request', icon: <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> },
-      { path: '#order-history', label: 'History', icon: <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> },
-      { path: '#settings', label: 'Settings', icon: <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> }
+      { path: '#home', label: 'Home', icon: <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg> },
+      { path: isAdmin ? '#requested-orders' : '#create-request', label: isAdmin ? 'Approvals' : 'Request', icon: <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></svg> },
+      { path: '#order-history', label: 'History', icon: <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg> },
+      { path: '#settings', label: 'Settings', icon: <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg> }
     ];
 
     return tabs.map(t => {
@@ -513,7 +631,7 @@ export default function App() {
         showToast("User Session Error", `User ${username} not found.`, "success");
         return;
       }
-      
+
       setCurrentUser(targetUser);
       setActiveRole(targetUser.role);
       localStorage.setItem("pms_current_user", JSON.stringify(targetUser));
@@ -526,16 +644,16 @@ export default function App() {
 
   return (
     <div className="simulation-container">
-      
+
       {/* APP MOBILE VIEWPORT CONTAINER */}
       <div className="app-frame-wrapper">
         <div className="device-frame">
-          
+
           {/* Toast Notification Layers */}
           <div className="toast-container">
             {toasts.map(t => (
               <div key={t.id} className={`toast ${t.type}`} style={{ position: 'relative', paddingRight: '28px' }}>
-                <button 
+                <button
                   onClick={() => setToasts(prev => prev.filter(toast => toast.id !== t.id))}
                   style={{
                     position: 'absolute',
