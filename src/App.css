@@ -972,17 +972,10 @@ select.form-control {
 .status-badge.pending { background-color: #eab308; color: #ffffff; }
 .status-badge.approved { background-color: #2563eb; color: #ffffff; }
 .status-badge.rejected { background-color: #6b7280; color: #ffffff; }
-.status-badge.intransit { background-color: #0ea5e9; color: #ffffff; }
-.status-badge.reachedwarehouse { background-color: #10b981; color: #ffffff; }
-.status-badge.delivered { background-color: #15803d; color: #ffffff; }
 .status-badge.noresponse { background-color: #ef4444; color: #ffffff; }
-.status-badge.booked { background-color: #8b5cf6; color: #ffffff; }
-.status-badge.pogenerated { background-color: #8b5cf6; color: #ffffff; }
-.status-badge.supplierassigned { background-color: #8b5cf6; color: #ffffff; }
-.status-badge.acknowledged { background-color: #a855f7; color: #ffffff; }
-.status-badge.picked { background-color: #f97316; color: #ffffff; }
-.status-badge.lrcopyreceived { background-color: #06b6d4; color: #ffffff; }
-.status-badge.delayed { background-color: #ef4444; color: #ffffff; }
+.status-badge.acknowledged { background-color: #f97316; color: #ffffff; }
+.status-badge.booked { background-color: #3b82f6; color: #ffffff; }
+.status-badge.received { background-color: #10b981; color: #ffffff; }
 .status-badge.cancelled { background-color: #6b7280; color: #ffffff; }
 
 /* Requested Order Card (Admin review) */
@@ -1470,4 +1463,29 @@ input:checked + .slider:before {
 }
 .btn-outlined-icon-key:hover {
   background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Smart View Glow Hover & Focus Effects */
+.smart-view-container {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid var(--border-color);
+  background-color: var(--card-bg);
+  border-radius: var(--border-radius-md);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.smart-view-container:hover,
+.smart-view-container:focus-within,
+.smart-view-container.expanded {
+  transform: translateY(-2px);
+  border-color: var(--primary-orange);
+  box-shadow: 0 0 15px rgba(230, 126, 53, 0.35), var(--shadow-md);
+  animation: glowPulse 2s infinite ease-in-out;
+}
+
+@keyframes glowPulse {
+  0% { box-shadow: 0 0 8px rgba(230, 126, 53, 0.25), var(--shadow-md); }
+  50% { box-shadow: 0 0 18px rgba(230, 126, 53, 0.55), var(--shadow-md); }
+  100% { box-shadow: 0 0 8px rgba(230, 126, 53, 0.25), var(--shadow-md); }
 }

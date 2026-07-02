@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 import { CONFIG } from './config';
-import { apiService, getDaysDifference, getDelayStartDate } from './services/api';
+import { apiService } from './services/api';
 import {
   HomeView,
   CreateRequestView,
@@ -21,68 +21,6 @@ import {
   DepartmentManagementView,
   Icons
 } from './components/Views';
-
-// Static overdue order classifier helper
-const checkOverdueOrdersStatic = (currentRequests, suppliersList) => {
-  const todayStr = new Date().toLocaleDateString('en-CA');
-  let changed = false;
-  const notificationsToTrigger = [];
-  const eventsToLog = [];
-
-  const updatedRequests = currentRequests.map(r => {
-    const isOverdue = r.dueDate && r.dueDate < todayStr;
-    const isNotCompleted = r.status !== "Delivered" && r.status !== "Rejected" && r.status !== "Cancelled";
-
-    if (isOverdue && isNotCompleted) {
-      const days = getDaysDifference(todayStr, r.dueDate);
-      const delayStart = r.delayStartDate || getDelayStartDate(r.dueDate);
-
-      if (r.status !== "Delayed") {
-        changed = true;
-        const supplier = suppliersList.find(s => s.id === r.supplierId) || { companyName: r.suggestedSupplier || "Not Assigned" };
-        
-        notificationsToTrigger.push({
-          title: `Delayed Order Alert: ${r.id}`,
-          body: `Order ${r.id} for "${r.productName}" from ${supplier.companyName} is overdue.\nDue Date: ${r.dueDate}\nOverdue: ${days} day(s).`,
-          role: "Both"
-        });
-
-        eventsToLog.push({
-          action: "Order Delayed Automatically",
-          prevStatus: r.status,
-          newStatus: "Delayed",
-          details: `Order ${r.id} is overdue by ${days} days.`
-        });
-
-        const updatedHistory = [...(r.history || []), {
-          status: "Delayed",
-          updatedBy: "System",
-          role: "Automated",
-          timestamp: new Date().toISOString(),
-          remarks: `Order automatically flagged as Delayed. Due date (${r.dueDate}) has passed. Overdue: ${days} days.`
-        }];
-
-        return {
-          ...r,
-          status: "Delayed",
-          delayedStatus: true,
-          delayStartDate: delayStart,
-          delayedDays: days,
-          history: updatedHistory
-        };
-      } else if (r.delayedDays !== days) {
-        changed = true;
-        return {
-          ...r,
-          delayedDays: days
-        };
-      }
-    }
-    return r;
-  });
-
-  return { updatedRequests, notificationsToTrigger, eventsToLog, changed };
-};
 
 export default function App() {
   // ----------------------------------------------------
@@ -233,62 +171,6 @@ export default function App() {
     document.title = branding.appName;
   }, [branding]);
 
-  // Automatic Overdue Orders Check & Sync Effect
-  useEffect(() => {
-    if (requests.length === 0 || suppliers.length === 0) return;
-
-    const { updatedRequests, notificationsToTrigger, eventsToLog, changed } = checkOverdueOrdersStatic(requests, suppliers);
-
-    if (changed) {
-      setRequests(updatedRequests);
-      
-      const baseUrl = localStorage.getItem("pms_api_base_url") || "";
-      if (!baseUrl) {
-        localStorage.setItem("pms_requests", JSON.stringify(updatedRequests));
-      }
-
-      notificationsToTrigger.forEach(n => {
-        addNotification(n.title, n.body, n.role);
-      });
-
-      eventsToLog.forEach(e => {
-        logEvent(e.action, e.prevStatus, e.newStatus, e.details);
-      });
-    }
-  }, [requests, suppliers]);
-
-  // Periodic Overdue Scan Interval
-  useEffect(() => {
-    if (suppliers.length === 0) return;
-
-    const scanInterval = setInterval(() => {
-      setRequests(prevRequests => {
-        if (prevRequests.length === 0) return prevRequests;
-        const { updatedRequests, notificationsToTrigger, eventsToLog, changed } = checkOverdueOrdersStatic(prevRequests, suppliers);
-        
-        if (changed) {
-          const baseUrl = localStorage.getItem("pms_api_base_url") || "";
-          if (!baseUrl) {
-            localStorage.setItem("pms_requests", JSON.stringify(updatedRequests));
-          }
-
-          notificationsToTrigger.forEach(n => {
-            addNotification(n.title, n.body, n.role);
-          });
-
-          eventsToLog.forEach(e => {
-            logEvent(e.action, e.prevStatus, e.newStatus, e.details);
-          });
-
-          return updatedRequests;
-        }
-        return prevRequests;
-      });
-    }, 10000); // Check every 10 seconds
-
-    return () => clearInterval(scanInterval);
-  }, [suppliers]);
-
   // ----------------------------------------------------
   // EVENT TRAIL LOGGER & WEBHOOK TRIGGERS
   // ----------------------------------------------------
@@ -416,10 +298,8 @@ export default function App() {
       quickReplies: [
         { text: "Accepted", reply: "Thank you for the PO. We have accepted the order and are processing it." },
         { text: "Rejected", reply: "Apologies, we cannot fulfill this order at this moment. Order rejected." },
-        { text: "Picked", reply: "Material has been picked and packed from our store." },
         { text: "Dispatched", reply: "The material has been dispatched. Here is the LR Copy Link: https://api.alagiri.com/receipt/LR-4421.png" },
-        { text: "Delivered", reply: "Material delivered and handed over at site. Delivery confirmed." },
-        { text: "Delayed", reply: "We regret to inform you that shipment is delayed by 3 days due to transport issues." }
+        { text: "Delivered", reply: "Material delivered and handed over at site. Delivery confirmed." }
       ]
     });
   };
@@ -439,10 +319,8 @@ export default function App() {
 
     if (status === "Accepted") systemStatus = "Acknowledged";
     else if (status === "Rejected") systemStatus = "Rejected";
-    else if (status === "Picked") systemStatus = "Picked";
-    else if (status === "Dispatched") systemStatus = "In Transit";
-    else if (status === "Delivered") systemStatus = "Delivered";
-    else if (status === "Delayed") systemStatus = "Delayed";
+    else if (status === "Dispatched") systemStatus = "Booked";
+    else if (status === "Delivered") systemStatus = "Received";
     else systemStatus = "Pending";
 
     const req = requests.find(r => r.id === chatThread.requestId);

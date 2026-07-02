@@ -150,60 +150,12 @@ export const apiService = {
   // ------------------------------------------------
   async getRequests() {
     const baseUrl = getApiBaseUrl();
-    let requests;
     if (baseUrl) {
       const res = await fetch(`${baseUrl}/requests`);
       if (!res.ok) throw new Error("Failed to fetch requests from live API");
-      requests = await res.json();
-    } else {
-      requests = mockDb.getRequests();
+      return await res.json();
     }
-
-    const todayStr = new Date().toLocaleDateString('en-CA'); // Format: yyyy-mm-dd
-    let changed = false;
-    const updated = requests.map(r => {
-      const isOverdue = r.dueDate && r.dueDate < todayStr;
-      const isNotCompleted = r.status !== "Delivered" && r.status !== "Rejected" && r.status !== "Cancelled";
-
-      if (isOverdue && isNotCompleted) {
-        const days = getDaysDifference(todayStr, r.dueDate);
-        const delayStart = r.delayStartDate || getDelayStartDate(r.dueDate);
-
-        if (r.status !== "Delayed") {
-          changed = true;
-          const updatedHistory = [...(r.history || []), {
-            status: "Delayed",
-            updatedBy: "System",
-            role: "Automated",
-            timestamp: new Date().toISOString(),
-            remarks: `Order automatically flagged as Delayed. Due date (${r.dueDate}) has passed. Overdue: ${days} days.`
-          }];
-          return {
-            ...r,
-            status: "Delayed",
-            delayedStatus: true,
-            delayStartDate: delayStart,
-            delayedDays: days,
-            history: updatedHistory
-          };
-        } else if (r.delayedDays !== days) {
-          changed = true;
-          return {
-            ...r,
-            delayedDays: days
-          };
-        }
-      }
-      return r;
-    });
-
-    if (changed) {
-      if (!baseUrl) {
-        mockDb.saveRequests(updated);
-      }
-      return updated;
-    }
-    return requests;
+    return mockDb.getRequests();
   },
 
   async createRequest(requestData) {
@@ -227,39 +179,9 @@ export const apiService = {
   async updateRequest(requestId, updatedRequest) {
     const baseUrl = getApiBaseUrl();
     
-    // Check if the order is being marked as Delivered
-    if (updatedRequest.status === "Delivered") {
-      const wasDelayed = updatedRequest.delayedStatus === true || 
-                         (updatedRequest.history && updatedRequest.history.some(h => h.status === "Delayed"));
-      
-      const todayStr = new Date().toLocaleDateString('en-CA');
-      const isOverdue = updatedRequest.dueDate && updatedRequest.dueDate < todayStr;
-
-      if (wasDelayed || isOverdue) {
-        updatedRequest.delayedStatus = true;
-        if (!updatedRequest.actualDeliveryDate) {
-          updatedRequest.actualDeliveryDate = new Date().toISOString();
-        }
-        
-        const deliveryDateStr = updatedRequest.actualDeliveryDate.split('T')[0];
-        const days = getDaysDifference(deliveryDateStr, updatedRequest.dueDate);
-        updatedRequest.delayedDays = days > 0 ? days : updatedRequest.delayedDays || 0;
-        
-        // Find the "Delivered" history entry and update its remarks with the note
-        if (updatedRequest.history && updatedRequest.history.length > 0) {
-          const lastEntryIdx = updatedRequest.history.length - 1;
-          const lastEntry = updatedRequest.history[lastEntryIdx];
-          if (lastEntry.status === "Delivered") {
-            const note = `Delivered ${updatedRequest.delayedDays} days after the Due Date.`;
-            if (lastEntry.remarks) {
-              if (!lastEntry.remarks.includes("after the Due Date")) {
-                lastEntry.remarks = `${lastEntry.remarks} (${note})`;
-              }
-            } else {
-              lastEntry.remarks = note;
-            }
-          }
-        }
+    if (updatedRequest.status === "Received") {
+      if (!updatedRequest.actualDeliveryDate) {
+        updatedRequest.actualDeliveryDate = new Date().toISOString();
       }
     }
 

@@ -35,7 +35,7 @@ const formatDate = (isoString) => {
 // 1. HOME VIEW COMPONENT
 // ----------------------------------------------------
 export function HomeView({ state, navigateTo, openModal, closeModal, setModalContent }) {
-  const [smartOpen, setSmartOpen] = useState(true);
+  const [smartOpen, setSmartOpen] = useState(false);
   const user = state.currentUser;
   const isEmployee = user.role === "Employee";
 
@@ -43,11 +43,21 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
     ? state.requests.filter(r => r.employeeName === user.name) 
     : state.requests;
 
-  const liveOrderStatuses = ["Approved", "Booked", "Acknowledged", "Picked", "In Transit", "LR Copy Received", "Reached Warehouse"];
-  const totalLiveCount = userRequests.filter(r => liveOrderStatuses.includes(r.status)).length;
+  const isOlderThan14Days = (dateStr) => {
+    if (!dateStr) return false;
+    const date = new Date(dateStr);
+    const diffTime = new Date() - date;
+    const diffDays = diffTime / (1000 * 60 * 60 * 24);
+    return diffDays > 14;
+  };
+
   const pendingCount = userRequests.filter(r => r.status === "Pending").length;
-  const delayedCount = userRequests.filter(r => ["Delayed", "No Response"].includes(r.status)).length;
-  const completedCount = userRequests.filter(r => r.status === "Delivered").length;
+  const noResponseCount = userRequests.filter(r => r.status === "No Response").length;
+  const acknowledgedCount = userRequests.filter(r => r.status === "Acknowledged").length;
+  const bookedCount = userRequests.filter(r => r.status === "Booked").length;
+  const receivedCount = userRequests.filter(r => r.status === "Received" && !isOlderThan14Days(r.actualDeliveryDate)).length;
+
+  const totalLiveCount = noResponseCount + acknowledgedCount + bookedCount + receivedCount;
 
   const hr = new Date().getHours();
   const greetingMsg = hr < 12 ? "Good Morning" : hr < 17 ? "Good Afternoon" : "Good Evening";
@@ -62,14 +72,6 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
       ? `You have ${pendingCount} pending approvals awaiting review.`
       : "All procurement requests have been processed.";
   }
-
-  const smartRequests = isEmployee 
-    ? state.requests.filter(r => r.employeeName === user.name) 
-    : state.requests;
-
-  const sortedSmart = [...smartRequests]
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
-    .slice(0, 5);
 
   const openNotifications = () => {
     const list = state.notifications.filter(n => n.role === "Both" || n.role === user.role);
@@ -127,84 +129,152 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
         <div className="greeting-user">{welcomeAlert}</div>
       </div>
 
-
-      {/* Dynamic Colored Dashboard Metric Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
-        <div className="stat-card blue-theme" onClick={() => navigateTo('#live-orders')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', margin: 0, gap: '8px', cursor: 'pointer', padding: '16px', background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: 'var(--border-radius-md)' }}>
-          <span style={{ fontSize: '20px' }}>🟦</span>
-          <div style={{ textAlign: 'left' }}>
-            <div style={{ fontSize: '24px', fontWeight: '800', lineHeight: '1', color: '#1e40af' }}>{totalLiveCount}</div>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#2563eb', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Live Orders</div>
-          </div>
+      {/* 1. Requested Orders Card */}
+      <div className="stat-card" onClick={() => navigateTo(isEmployee ? '#pending-orders' : '#requested-orders')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '16px', background: '#fff7ed', border: '1.5px solid #ffedd5', borderRadius: 'var(--border-radius-md)', marginBottom: '16px', width: '100%', boxSizing: 'border-box' }}>
+        <div style={{ textAlign: 'left' }}>
+          <div style={{ fontSize: '13px', fontWeight: '800', color: '#ea580c', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Requested Orders</div>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Awaiting Approval Review</div>
         </div>
+        <div style={{ fontSize: '24px', fontWeight: '800', color: '#c2410c' }}>{pendingCount}</div>
+      </div>
 
-        <div className="stat-card orange-theme" onClick={() => {
-          if (user.role === 'Employee') {
-            navigateTo('#pending-orders');
-          } else {
-            navigateTo('#requested-orders');
-          }
-        }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', margin: 0, gap: '8px', cursor: 'pointer', padding: '16px', background: '#fff7ed', border: '1.5px solid #ffedd5', borderRadius: 'var(--border-radius-md)' }}>
-          <span style={{ fontSize: '20px' }}>🟧</span>
-          <div style={{ textAlign: 'left' }}>
-            <div style={{ fontSize: '24px', fontWeight: '800', lineHeight: '1', color: '#c2410c' }}>{pendingCount}</div>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#ea580c', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              {isEmployee ? 'My Pending' : 'Pending Approval'}
-            </div>
-          </div>
+      {/* 2. Live Orders Card */}
+      <div className="stat-card" onClick={() => navigateTo('#live-orders')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', cursor: 'pointer', padding: '16px', background: 'var(--card-bg)', border: '1.5px solid var(--border-color)', borderRadius: 'var(--border-radius-md)', marginBottom: '16px', gap: '12px', width: '100%', boxSizing: 'border-box' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-main)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Live Orders</div>
+          <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--primary-orange)' }}>{totalLiveCount}</div>
         </div>
-
-        <div className="stat-card red-theme" onClick={() => navigateTo('#live-orders?filter=delayed')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', margin: 0, gap: '8px', cursor: 'pointer', padding: '16px', background: '#fef2f2', border: '1.5px solid #fee2e2', borderRadius: 'var(--border-radius-md)' }}>
-          <span style={{ fontSize: '20px' }}>🟥</span>
-          <div style={{ textAlign: 'left' }}>
-            <div style={{ fontSize: '24px', fontWeight: '800', lineHeight: '1', color: '#b91c1c' }}>{delayedCount}</div>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#ef4444', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Delayed Orders</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+          <div style={{ textAlign: 'center', background: '#fef2f2', border: '1px solid #fee2e2', padding: '8px 4px', borderRadius: '8px' }}>
+            <div style={{ fontSize: '14px' }}>🔴</div>
+            <div style={{ fontSize: '16px', fontWeight: '800', color: '#b91c1c', marginTop: '2px' }}>{noResponseCount}</div>
+            <div style={{ fontSize: '9px', fontWeight: '700', color: '#ef4444', textTransform: 'uppercase', marginTop: '2px' }}>No Resp</div>
           </div>
-        </div>
-
-        <div className="stat-card green-theme" onClick={() => navigateTo('#order-history')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', margin: 0, gap: '8px', cursor: 'pointer', padding: '16px', background: '#f0fdf4', border: '1.5px solid #dcfce7', borderRadius: 'var(--border-radius-md)' }}>
-          <span style={{ fontSize: '20px' }}>🟩</span>
-          <div style={{ textAlign: 'left' }}>
-            <div style={{ fontSize: '24px', fontWeight: '800', lineHeight: '1', color: '#15803d' }}>{completedCount}</div>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#16a34a', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Completed Orders</div>
+          <div style={{ textAlign: 'center', background: '#fff7ed', border: '1px solid #ffedd5', padding: '8px 4px', borderRadius: '8px' }}>
+            <div style={{ fontSize: '14px' }}>🟠</div>
+            <div style={{ fontSize: '16px', fontWeight: '800', color: '#c2410c', marginTop: '2px' }}>{acknowledgedCount}</div>
+            <div style={{ fontSize: '9px', fontWeight: '700', color: '#ea580c', textTransform: 'uppercase', marginTop: '2px' }}>Ack</div>
+          </div>
+          <div style={{ textAlign: 'center', background: '#eff6ff', border: '1px solid #bfdbfe', padding: '8px 4px', borderRadius: '8px' }}>
+            <div style={{ fontSize: '14px' }}>🔵</div>
+            <div style={{ fontSize: '16px', fontWeight: '800', color: '#1e40af', marginTop: '2px' }}>{bookedCount}</div>
+            <div style={{ fontSize: '9px', fontWeight: '700', color: '#3b82f6', textTransform: 'uppercase', marginTop: '2px' }}>Booked</div>
+          </div>
+          <div style={{ textAlign: 'center', background: '#f0fdf4', border: '1px solid #dcfce7', padding: '8px 4px', borderRadius: '8px' }}>
+            <div style={{ fontSize: '14px' }}>🟢</div>
+            <div style={{ fontSize: '16px', fontWeight: '800', color: '#15803d', marginTop: '2px' }}>{receivedCount}</div>
+            <div style={{ fontSize: '9px', fontWeight: '700', color: '#16a34a', textTransform: 'uppercase', marginTop: '2px' }}>Recd</div>
           </div>
         </div>
       </div>
 
-      <button className="btn-dark" onClick={() => navigateTo('#create-request')} style={{ cursor: 'pointer' }}>
+      {/* 3. Create Request Button */}
+      <button className="btn-orange" onClick={() => navigateTo('#create-request')} style={{ cursor: 'pointer', marginBottom: '24px' }}>
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: '6px' }}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
         Create Request
       </button>
 
-      <div className={`collapsible-section ${smartOpen ? 'open' : ''}`}>
-        <div className="collapsible-header" onClick={() => setSmartOpen(!smartOpen)} style={{ cursor: 'pointer' }}>
-          <span className="collapsible-title">SMART VIEW</span>
-          <div className="collapsible-icon-wrapper">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9" /></svg>
+      {/* 4. Smart View Card */}
+      <div className={`smart-view-container ${smartOpen ? 'expanded' : ''}`} style={{ marginBottom: '16px' }}>
+        <div 
+          onClick={() => setSmartOpen(!smartOpen)} 
+          style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            padding: '16px', 
+            cursor: 'pointer',
+            background: 'var(--card-bg)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '16px' }}>✨</span>
+            <span style={{ fontWeight: '800', fontSize: '13px', color: 'var(--text-main)', letterSpacing: '0.7px', textTransform: 'uppercase' }}>Smart View</span>
           </div>
+          <svg 
+            viewBox="0 0 24 24" 
+            width="18" 
+            height="18" 
+            fill="none" 
+            stroke="currentColor" 
+            strokeWidth="2.5"
+            style={{ 
+              transform: smartOpen ? 'rotate(180deg)' : 'rotate(0deg)', 
+              transition: 'transform 0.3s ease',
+              color: 'var(--text-muted)'
+            }}
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
         </div>
-        <div className="collapsible-content" style={{ maxHeight: smartOpen ? '500px' : '0' }}>
-          {sortedSmart.length === 0 ? (
-            <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
-              No active requests found.
-            </div>
-          ) : (
-            sortedSmart.map(req => (
-              <div key={req.id} style={{ padding: '14px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => navigateTo(`#order-details?id=${req.id}`)}>
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontWeight: '700', fontSize: '14px', color: 'var(--text-main)' }}>{req.productName}</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                    {req.id} • {formatDate(req.date)} • Qty: {req.qty} {req.units}
-                  </div>
-                </div>
-                <span className={`status-badge ${req.status.toLowerCase().replace(/ /g, '')}`}>{req.status}</span>
+        
+        <div 
+          style={{ 
+            maxHeight: smartOpen ? '320px' : '0px', 
+            overflow: 'hidden', 
+            transition: 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+            background: 'var(--card-bg)',
+            borderTop: smartOpen ? '1px solid var(--border-color)' : 'none'
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', padding: '8px 0' }}>
+            <div 
+              onClick={() => navigateTo('#live-orders?filter=noresponse')}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '14px' }}>🔴</span>
+                <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-main)' }}>No Response</span>
               </div>
-            ))
-          )}
+              <span style={{ background: '#fef2f2', color: '#b91c1c', fontWeight: '800', fontSize: '12px', padding: '2px 8px', borderRadius: '12px', border: '1px solid #fee2e2' }}>
+                {noResponseCount} orders
+              </span>
+            </div>
+
+            <div 
+              onClick={() => navigateTo('#live-orders?filter=acknowledged')}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '14px' }}>🟠</span>
+                <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-main)' }}>Acknowledged</span>
+              </div>
+              <span style={{ background: '#fff7ed', color: '#c2410c', fontWeight: '800', fontSize: '12px', padding: '2px 8px', borderRadius: '12px', border: '1px solid #ffedd5' }}>
+                {acknowledgedCount} orders
+              </span>
+            </div>
+
+            <div 
+              onClick={() => navigateTo('#live-orders?filter=booked')}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '14px' }}>🔵</span>
+                <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-main)' }}>Booked</span>
+              </div>
+              <span style={{ background: '#eff6ff', color: '#1e40af', fontWeight: '800', fontSize: '12px', padding: '2px 8px', borderRadius: '12px', border: '1px solid #bfdbfe' }}>
+                {bookedCount} orders
+              </span>
+            </div>
+
+            <div 
+              onClick={() => navigateTo('#live-orders?filter=received')}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', cursor: 'pointer' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '14px' }}>🟢</span>
+                <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-main)' }}>Received</span>
+              </div>
+              <span style={{ background: '#f0fdf4', color: '#15803d', fontWeight: '800', fontSize: '12px', padding: '2px 8px', borderRadius: '12px', border: '1px solid #dcfce7' }}>
+                {receivedCount} orders
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="menu-card" onClick={() => navigateTo('#order-history')} style={{ cursor: 'pointer' }}>
+      {/* 5. Order History Card */}
+      <div className="menu-card" onClick={() => navigateTo('#order-history')} style={{ cursor: 'pointer', marginTop: '16px' }}>
         <span className="menu-card-title">Order history</span>
         <Icons.ChevronRight />
       </div>
@@ -275,7 +345,7 @@ export function CreateRequestView({ state, navigateTo, addNotification, openModa
 
   // New Date, Priority and Document attachments states
   const [dueDate, setDueDate] = useState("");
-  const [priority, setPriority] = useState("Non-Critical");
+  const [priority, setPriority] = useState("Normal");
   const [attachedFile, setAttachedFile] = useState(null);
   const [attachedFileName, setAttachedFileName] = useState("");
 
@@ -507,7 +577,7 @@ export function CreateRequestView({ state, navigateTo, addNotification, openModa
       description,
       status: "Pending",
       dueDate: dueDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      priority: priority || "Medium",
+      priority: priority || "Normal",
       image: attachedFile || null,
       imageName: attachedFileName || "",
       supplierId: "",
@@ -616,6 +686,7 @@ export function CreateRequestView({ state, navigateTo, addNotification, openModa
               <option value="Box">Box</option>
               <option value="Meter">Meter</option>
               <option value="Nos">Nos</option>
+              <option value="Feet (ft)">Feet (ft)</option>
             </select>
             {errors.units && <div style={{ color: 'var(--status-red)', fontSize: '11px', marginTop: '4px', textAlign: 'left' }}>{errors.units}</div>}
           </div>
@@ -626,7 +697,23 @@ export function CreateRequestView({ state, navigateTo, addNotification, openModa
             <h4 style={{ fontSize: '12px', fontWeight: '800', marginBottom: '10px', textTransform: 'uppercase', color: 'var(--primary-orange)', letterSpacing: '0.5px' }}>Suggest Supplier (Optional)</h4>
             <div className="form-group">
               <label>Supplier Name</label>
-              <input type="text" className="form-control" placeholder="e.g. AB Company" value={suggestedSupplier} onChange={e => setSuggestedSupplier(e.target.value)} />
+              <select className="form-control" value={suggestedSupplier} onChange={e => {
+                const name = e.target.value;
+                setSuggestedSupplier(name);
+                const s = state.suppliers.find(sup => sup.companyName === name);
+                if (s) {
+                  setSuggestedSupplierPhone(s.whatsappNumber || s.phoneNumber || "");
+                  setSuggestedSupplierEmail(s.email || "");
+                } else {
+                  setSuggestedSupplierPhone("");
+                  setSuggestedSupplierEmail("");
+                }
+              }} style={{ cursor: 'pointer' }}>
+                <option value="">-- Choose Supplier (Optional) --</option>
+                {state.suppliers.map(sup => (
+                  <option key={sup.id} value={sup.companyName}>{sup.companyName}</option>
+                ))}
+              </select>
             </div>
             <div className="form-row">
               <div className="form-group">
@@ -648,7 +735,12 @@ export function CreateRequestView({ state, navigateTo, addNotification, openModa
         ) : (
           <div className="form-group">
             <label>Suggest supplier</label>
-            <input type="text" className="form-control" placeholder="e.g. AB company" value={suggestedSupplier} onChange={e => setSuggestedSupplier(e.target.value)} />
+            <select className="form-control" value={suggestedSupplier} onChange={e => setSuggestedSupplier(e.target.value)} style={{ cursor: 'pointer' }}>
+              <option value="">-- Choose Supplier (Optional) --</option>
+              {state.suppliers.map(sup => (
+                <option key={sup.id} value={sup.companyName}>{sup.companyName}</option>
+              ))}
+            </select>
           </div>
         )}
 
@@ -678,8 +770,8 @@ export function CreateRequestView({ state, navigateTo, addNotification, openModa
           <div className="form-group">
             <label>Importance</label>
             <select className="form-control" value={priority} onChange={e => setPriority(e.target.value)} style={{ cursor: 'pointer' }}>
-              <option value="Non-Critical">Non-Critical</option>
-              <option value="Critical">Critical</option>
+              <option value="Normal">Normal</option>
+              <option value="Urgent">Urgent</option>
             </select>
           </div>
         </div>
@@ -779,11 +871,21 @@ export function CreateRequestView({ state, navigateTo, addNotification, openModa
 // ----------------------------------------------------
 // SUPPLIER PICKER SUB-COMPONENT (WITH SEARCH & HIGHLIGHTING)
 // ----------------------------------------------------
-export function SupplierPicker({ suppliers, currentSupplierId, onSelect }) {
+export function SupplierPicker({ suppliers, currentSupplierId, onSelect, productName }) {
   const [query, setQuery] = useState("");
 
   const getSortedSuppliers = () => {
+    const queryTerm = (productName || "").toLowerCase().trim();
     return [...suppliers].sort((a, b) => {
+      const aProducts = (a.products || "").toLowerCase();
+      const bProducts = (b.products || "").toLowerCase();
+      
+      const aMatches = queryTerm && (aProducts.includes(queryTerm) || queryTerm.split(' ').some(w => w.length > 2 && aProducts.includes(w)));
+      const bMatches = queryTerm && (bProducts.includes(queryTerm) || queryTerm.split(' ').some(w => w.length > 2 && bProducts.includes(w)));
+      
+      if (aMatches && !bMatches) return -1;
+      if (!aMatches && bMatches) return 1;
+
       const aRating = a.rating || 0;
       const bRating = b.rating || 0;
       if (bRating !== aRating) return bRating - aRating;
@@ -837,6 +939,9 @@ export function SupplierPicker({ suppliers, currentSupplierId, onSelect }) {
         ) : (
           filtered.map(sup => {
             const isNewest = newestSupplier && newestSupplier.id === sup.id;
+            const queryTerm = (productName || "").toLowerCase().trim();
+            const aProducts = (sup.products || "").toLowerCase();
+            const isRecommended = queryTerm && (aProducts.includes(queryTerm) || queryTerm.split(' ').some(w => w.length > 2 && aProducts.includes(w)));
             return (
               <div 
                 key={sup.id} 
@@ -852,7 +957,14 @@ export function SupplierPicker({ suppliers, currentSupplierId, onSelect }) {
                 onClick={() => onSelect(sup.id)}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontWeight: '700', fontSize: '14px', color: 'var(--text-main)' }}>{sup.companyName}</div>
+                  <div style={{ fontWeight: '700', fontSize: '14px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {sup.companyName}
+                    {isRecommended && (
+                      <span style={{ background: '#ffedd5', color: '#ea580c', fontSize: '10px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '4px', border: '1px solid #ffd8a8' }}>
+                        ★ Recommended
+                      </span>
+                    )}
+                  </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <div style={{ display: 'inline-flex' }}>
                       {Array.from({ length: 5 }).map((_, i) => (
@@ -889,6 +1001,7 @@ export function RequestedOrdersView({ state, navigateTo, addNotification, openMo
   
   // Custom local state for review card fields
   const [formData, setFormData] = useState({});
+  const [ignoredSuggestions, setIgnoredSuggestions] = useState({});
 
   useEffect(() => {
     const data = {};
@@ -976,11 +1089,11 @@ export function RequestedOrdersView({ state, navigateTo, addNotification, openMo
 
       const user = state.currentUser;
       const updatedHistory = [...req.history, {
-        status: "Approved",
+        status: "No Response",
         updatedBy: user.name,
         role: user.role,
         timestamp: new Date().toISOString(),
-        remarks: "Approved and PO generated."
+        remarks: "Approved and PO generated (Order Placed)."
       }];
 
       const updatedReq = {
@@ -993,7 +1106,7 @@ export function RequestedOrdersView({ state, navigateTo, addNotification, openMo
         supplierId: cardData.supplierId,
         poNumber: `PO-${new Date().getFullYear()}-${100 + state.requests.length}`,
         poDate: new Date().toISOString(),
-        status: "Approved",
+        status: "No Response",
         history: updatedHistory
       };
 
@@ -1003,7 +1116,7 @@ export function RequestedOrdersView({ state, navigateTo, addNotification, openMo
       }
       state.setRequests(state.requests.map(r => r.id === id ? saved : r));
 
-      state.logEvent("Approved Request & Edited", "Pending", "Approved", `Admin approved ${id}. Assigned Supplier ID: ${cardData.supplierId}`);
+      state.logEvent("Approved Request & Edited", "Pending", "No Response", `Admin approved ${id}. Assigned Supplier ID: ${cardData.supplierId}`);
       addNotification("Request Approved", `${cardData.productName} requested by ${req.employeeName} has been approved.`, "Both");
 
       navigateTo(`#po-preview?id=${id}`);
@@ -1082,6 +1195,7 @@ export function RequestedOrdersView({ state, navigateTo, addNotification, openMo
         suppliers={state.suppliers} 
         currentSupplierId={formData[requestId]?.supplierId} 
         onSelect={handleSelect} 
+        productName={formData[requestId]?.productName}
       />,
       "Select Supplier"
     );
@@ -1146,13 +1260,43 @@ export function RequestedOrdersView({ state, navigateTo, addNotification, openMo
                   </select>
                 </div>
 
-                {req.suggestedSupplier && (
-                  <div style={{ background: 'var(--bg-cream)', padding: '10px', borderRadius: '6px', marginBottom: '12px', fontSize: '11px', textAlign: 'left', border: '1px solid var(--border-color)' }}>
-                    <div style={{ fontWeight: '800', color: 'var(--primary-orange)', marginBottom: '4px' }}>Suggested Supplier:</div>
+                {req.suggestedSupplier && !ignoredSuggestions[req.id] && (
+                  <div style={{ background: 'var(--bg-cream)', padding: '12px', borderRadius: '8px', marginBottom: '12px', fontSize: '11px', textAlign: 'left', border: '1px solid var(--border-color)' }}>
+                    <div style={{ fontWeight: '850', color: 'var(--primary-orange)', textTransform: 'uppercase', letterSpacing: '0.3px', marginBottom: '6px' }}>Suggested Supplier Details:</div>
                     <div><b>Name:</b> {req.suggestedSupplier}</div>
                     {req.suggestedSupplierPhone && <div><b>Phone:</b> {req.suggestedSupplierPhone}</div>}
                     {req.suggestedSupplierEmail && <div><b>Email:</b> {req.suggestedSupplierEmail}</div>}
-                    {req.suggestedSupplierRemarks && <div style={{ marginTop: '2px', fontStyle: 'italic', color: 'var(--text-muted)' }}><b>Remarks:</b> "{req.suggestedSupplierRemarks}"</div>}
+                    {req.suggestedSupplierRemarks && <div style={{ marginTop: '4px', fontStyle: 'italic', color: 'var(--text-muted)' }}><b>Remarks:</b> "{req.suggestedSupplierRemarks}"</div>}
+                    
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                      <button 
+                        type="button" 
+                        className="btn-orange" 
+                        onClick={() => {
+                          const match = state.suppliers.find(s => s.companyName.toLowerCase() === req.suggestedSupplier.toLowerCase());
+                          if (match) {
+                            updateCardField(req.id, "supplierId", match.id);
+                            state.showToast("Supplier Accepted", `Auto-populated with ${match.companyName}`, "info");
+                          } else {
+                            state.showToast("Supplier Match Failed", `No registered supplier matching "${req.suggestedSupplier}"`, "success");
+                          }
+                        }}
+                        style={{ padding: '6px 12px', fontSize: '11px', cursor: 'pointer', flex: 1, height: '32px' }}
+                      >
+                        ✓ Accept Suggested Supplier
+                      </button>
+                      <button 
+                        type="button" 
+                        className="btn-dark" 
+                        onClick={() => {
+                          setIgnoredSuggestions(prev => ({ ...prev, [req.id]: true }));
+                          state.showToast("Suggestion Ignored", "You can manually select the supplier.", "info");
+                        }}
+                        style={{ padding: '6px 12px', fontSize: '11px', cursor: 'pointer', flex: 1, height: '32px', backgroundColor: 'var(--text-muted)' }}
+                      >
+                        ✕ Ignore Suggestion
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -1204,72 +1348,26 @@ Delivery Location: *${req.billTo}*
   const handleShareWhatsApp = async () => {
     const url = `https://api.whatsapp.com/send?phone=${supplier.whatsappNumber || ""}&text=${encodeURIComponent(formattedMsg)}`;
     
-    // Set status to Booked
+    // Set status to No Response (Order Placed)
     const updatedHistory = [...req.history, {
-      status: "Booked",
+      status: "No Response",
       updatedBy: state.currentUser.name,
       role: state.currentUser.role || "Admin",
       timestamp: new Date().toISOString(),
       remarks: "PO dispatched to WhatsApp."
     }];
-    const updatedReq = { ...req, status: "Booked", history: updatedHistory };
+    const updatedReq = { ...req, status: "No Response", history: updatedHistory };
     const saved = await apiService.updateRequest(requestId, updatedReq);
     state.setRequests(state.requests.map(r => r.id === requestId ? saved : r));
 
-    state.logEvent("WhatsApp Message Sent", "Approved", "Booked", `Sent PO via WhatsApp to ${supplier.companyName || "supplier"}`);
-    addNotification("Order Updated", `Order ${requestId} status changed to Booked`, "Both");
+    state.logEvent("WhatsApp Message Sent", "No Response", "No Response", `Sent PO via WhatsApp to ${supplier.companyName || "supplier"}`);
+    addNotification("Order Placed", `Order ${requestId} status is now No Response (Awaiting Supplier Acknowledgment)`, "Both");
     state.triggerWebhook("status.changed", saved);
 
     // Initial WhatsApp Simulator thread
     state.initWhatsAppThread(requestId, formattedMsg);
 
     window.open(url, '_blank');
-    navigateTo('#live-orders');
-  };
-
-  const handleShareMail = async () => {
-    const url = `mailto:${supplier.email || ""}?subject=Purchase Order Confirmation&body=${encodeURIComponent(formattedMsg)}`;
-
-    const updatedHistory = [...req.history, {
-      status: "Booked",
-      updatedBy: state.currentUser.name,
-      role: state.currentUser.role || "Admin",
-      timestamp: new Date().toISOString(),
-      remarks: "PO dispatched via email."
-    }];
-    const updatedReq = { ...req, status: "Booked", history: updatedHistory };
-    const saved = await apiService.updateRequest(requestId, updatedReq);
-    state.setRequests(state.requests.map(r => r.id === requestId ? saved : r));
-
-    state.logEvent("Email PO Sent", "Approved", "Booked", `Sent PO via email to ${supplier.email || "supplier"}`);
-    addNotification("Order Updated", `Order ${requestId} status changed to Booked`, "Both");
-
-    window.open(url, '_blank');
-    navigateTo('#live-orders');
-  };
-
-  const handleShareBoth = async () => {
-    const updatedHistory = [...req.history, {
-      status: "Booked",
-      updatedBy: state.currentUser.name,
-      role: state.currentUser.role || "Admin",
-      timestamp: new Date().toISOString(),
-      remarks: "PO dispatched via email and WhatsApp."
-    }];
-    const updatedReq = { ...req, status: "Booked", history: updatedHistory };
-    const saved = await apiService.updateRequest(requestId, updatedReq);
-    state.setRequests(state.requests.map(r => r.id === requestId ? saved : r));
-
-    state.logEvent("PO Shared via WhatsApp & Email", "Approved", "Booked", `Dispatched PO to ${supplier.companyName || "supplier"}`);
-    addNotification("Order Booked", `Order ${requestId} has been updated to Booked.`, "Both");
-    
-    state.initWhatsAppThread(requestId, formattedMsg);
-
-    window.open(`mailto:${supplier.email || ""}?subject=Purchase Order Confirmation&body=${encodeURIComponent(formattedMsg)}`, '_blank');
-    setTimeout(() => {
-      window.open(`https://api.whatsapp.com/send?phone=${supplier.whatsappNumber || ""}&text=${encodeURIComponent(formattedMsg)}`, '_blank');
-    }, 500);
-
     navigateTo('#live-orders');
   };
 
@@ -1341,16 +1439,8 @@ Delivery Location: *${req.billTo}*
           </div>
         </div>
 
-        <button className="btn-dark" onClick={handleShareWhatsApp} style={{ backgroundColor: '#128c7e', marginBottom: '10px' }}>
-          Share in Whatsapp
-        </button>
-
-        <button className="btn-dark" onClick={handleShareMail} style={{ backgroundColor: '#2a2726', marginBottom: '10px' }}>
-          Share in Mail
-        </button>
-
-        <button className="btn-dark" onClick={handleShareBoth} style={{ backgroundColor: 'var(--primary-orange)', marginBottom: '20px' }}>
-          Share in both
+        <button className="btn-orange" onClick={handleShareWhatsApp} style={{ marginBottom: '20px', width: '100%', cursor: 'pointer' }}>
+          Share via WhatsApp
         </button>
       </div>
     </div>
@@ -1429,16 +1519,48 @@ export function LiveOrdersView({ state, navigateTo }) {
   const urlParams = new URLSearchParams(window.location.hash.split('?')[1] || "");
   const filterParam = urlParams.get('filter');
 
-  const liveOrderStatuses = ["Approved", "Booked", "Acknowledged", "Picked", "In Transit", "LR Copy Received", "Reached Warehouse", "Delayed", "No Response"];
-  
-  let filteredRequests = isEmployee 
-    ? state.requests.filter(r => r.employeeName === user.name && liveOrderStatuses.includes(r.status)) 
-    : state.requests.filter(r => liveOrderStatuses.includes(r.status));
+  const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
+  const isWithin14Days = (dateIso) => {
+    if (!dateIso) return true;
+    return (new Date() - new Date(dateIso)) <= fourteenDaysMs;
+  };
 
-  if (filterParam === 'delayed') {
-    filteredRequests = filteredRequests.filter(r => ["Delayed", "No Response"].includes(r.status));
+  const [activeTab, setActiveTab] = useState(() => {
+    if (filterParam) {
+      const normalized = filterParam.toLowerCase().replace(/ /g, '');
+      if (normalized === 'noresponse') return 'No Response';
+      if (normalized === 'acknowledged') return 'Acknowledged';
+      if (normalized === 'booked') return 'Booked';
+      if (normalized === 'received') return 'Received';
+    }
+    return 'No Response';
+  });
+
+  // Track hash changes to update activeTab if navigated via smart view
+  useEffect(() => {
+    const handleHashChange = () => {
+      const params = new URLSearchParams(window.location.hash.split('?')[1] || "");
+      const f = params.get('filter');
+      if (f) {
+        const normalized = f.toLowerCase().replace(/ /g, '');
+        if (normalized === 'noresponse') setActiveTab('No Response');
+        if (normalized === 'acknowledged') setActiveTab('Acknowledged');
+        if (normalized === 'booked') setActiveTab('Booked');
+        if (normalized === 'received') setActiveTab('Received');
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  let filteredRequests = isEmployee 
+    ? state.requests.filter(r => r.employeeName === user.name) 
+    : state.requests;
+
+  if (activeTab === "Received") {
+    filteredRequests = filteredRequests.filter(r => r.status === "Received" && isWithin14Days(r.actualDeliveryDate));
   } else {
-    filteredRequests = filteredRequests.filter(r => !["Delayed", "No Response"].includes(r.status));
+    filteredRequests = filteredRequests.filter(r => r.status === activeTab);
   }
 
   const sorted = [...filteredRequests].sort((a, b) => {
@@ -1452,7 +1574,7 @@ export function LiveOrdersView({ state, navigateTo }) {
           <button className="back-btn" onClick={() => navigateTo('#home')} style={{ cursor: 'pointer' }}>
             <Icons.Back />
           </button>
-          <h1 style={{ fontSize: '20px' }}>{filterParam === 'delayed' ? 'Delayed Orders' : 'Live orders'}</h1>
+          <h1 style={{ fontSize: '20px' }}>Live orders</h1>
         </div>
         <div className="header-right">
           <div style={{ background: '#e5dec9', fontSize: '12px', fontWeight: '800', padding: '4px 8px', borderRadius: '4px', color: 'var(--text-main)' }}>
@@ -1462,9 +1584,52 @@ export function LiveOrdersView({ state, navigateTo }) {
       </header>
 
       <div style={{ paddingTop: '10px' }}>
+        {/* Tab Filters */}
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', marginBottom: '16px', background: 'var(--card-bg)', borderRadius: '8px', padding: '4px', gap: '4px' }}>
+          {["No Response", "Acknowledged", "Booked", "Received"].map(tab => {
+            const isActive = activeTab === tab;
+            let count = 0;
+            if (tab === "Received") {
+              count = isEmployee 
+                ? state.requests.filter(r => r.employeeName === user.name && r.status === "Received" && isWithin14Days(r.actualDeliveryDate)).length
+                : state.requests.filter(r => r.status === "Received" && isWithin14Days(r.actualDeliveryDate)).length;
+            } else {
+              count = isEmployee
+                ? state.requests.filter(r => r.employeeName === user.name && r.status === tab).length
+                : state.requests.filter(r => r.status === tab).length;
+            }
+            
+            return (
+              <button 
+                key={tab} 
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  flex: 1,
+                  padding: '8px 2px',
+                  fontSize: '11px',
+                  fontWeight: '800',
+                  border: 'none',
+                  background: isActive ? 'var(--primary-orange)' : 'transparent',
+                  color: isActive ? '#ffffff' : 'var(--text-main)',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '2px'
+                }}
+              >
+                <span>{tab}</span>
+                <span style={{ fontSize: '10px', background: isActive ? 'rgba(255,255,255,0.25)' : 'var(--bg-cream)', color: isActive ? '#fff' : 'var(--text-muted)', padding: '1px 6px', borderRadius: '10px', fontWeight: 'bold' }}>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+
         {sorted.length === 0 ? (
-          <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            No active live orders found.
+          <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)', background: 'var(--card-bg)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            No active orders in "{activeTab}" stage.
           </div>
         ) : (
           sorted.map(req => {
@@ -1483,11 +1648,6 @@ export function LiveOrdersView({ state, navigateTo }) {
                 <div className="card-status-line">
                   <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>{req.id}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {req.delayedStatus && req.status === "Delayed" && (
-                      <span style={{ color: 'var(--status-red)', fontWeight: 'bold', fontSize: '12px' }}>
-                        ⚠️ {req.delayedDays} Days Overdue
-                      </span>
-                    )}
                     <span className={`status-badge ${req.status.toLowerCase().replace(/ /g, '')}`}>{req.status}</span>
                   </div>
                 </div>
@@ -1500,48 +1660,55 @@ export function LiveOrdersView({ state, navigateTo }) {
   );
 }
 
-// ----------------------------------------------------
-// 6. ORDER DETAILS & TIMELINE COMPONENT
-// ----------------------------------------------------
 export function OrderDetailsView({ state, navigateTo, requestId, addNotification, openModal, closeModal, setModalContent }) {
   const req = state.requests.find(r => r.id === requestId);
-  const [newComment, setNewComment] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
   const [selectedFileName, setSelectedFileName] = useState("");
+  const [proofFile, setProofFile] = useState(null);
+  const [proofFileName, setProofFileName] = useState("");
 
   if (!req) return <p style={{ padding: '20px' }}>Order not found</p>;
-
-  const handleSendComment = async (e) => {
-    e.preventDefault();
-    if (!newComment.trim()) return;
-
-    const updatedHistory = [...req.history, {
-      status: req.status,
-      updatedBy: state.currentUser.name,
-      role: state.currentUser.role,
-      timestamp: new Date().toISOString(),
-      remarks: newComment
-    }];
-
-    const updatedReq = {
-      ...req,
-      history: updatedHistory
-    };
-
-    const saved = await apiService.updateRequest(requestId, updatedReq);
-    state.setRequests(state.requests.map(r => r.id === requestId ? saved : r));
-
-    state.logEvent("Added Comment", req.status, req.status, `${state.currentUser.name} commented: ${newComment}`);
-
-    setNewComment("");
-  };
 
   const supplier = state.suppliers.find(s => s.id === req.supplierId) || { companyName: "Not Assigned" };
   const dateStr = new Date(req.date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
   const timeStr = new Date(req.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
+  const handleProofCamera = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setProofFile(reader.result);
+        setProofFileName(file.name || `Proof_Camera_${Date.now()}.jpg`);
+        state.showToast("Proof Captured", "Camera image attached.", "success");
+        renderVerifyReceivedModal(reader.result, file.name || `Proof_Camera_${Date.now()}.jpg`);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      state.showToast("Camera Error", "Failed to capture image.", "success");
+    }
+  };
+
+  const handleProofGallery = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setProofFile(reader.result);
+        setProofFileName(file.name);
+        state.showToast("Proof Uploaded", `${file.name} attached.`, "success");
+        renderVerifyReceivedModal(reader.result, file.name);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      state.showToast("Upload Error", "Failed to read image file.", "success");
+    }
+  };
+
   const getLogisticsStatus = (r) => {
-    const sequence = ["Pending", "Approved", "Booked", "Acknowledged", "Picked", "In Transit", "LR Copy Received", "Reached Warehouse", "Delivered"];
+    const sequence = ["No Response", "Acknowledged", "Booked", "Received"];
     if (sequence.includes(r.status)) return r.status;
     if (r.history) {
       for (let i = r.history.length - 1; i >= 0; i--) {
@@ -1550,20 +1717,27 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
         }
       }
     }
-    return "Pending";
+    return "No Response";
   };
 
   const logisticsStatus = getLogisticsStatus(req);
-  const trackingStages = ["Picked", "In Transit", "Reached Warehouse", "Delivered"];
-  const currentStageIdx = trackingStages.indexOf(logisticsStatus);
+  const trackingStages = ["Order Placed", "Acknowledged", "Booked", "Received"];
 
   let progressWidth = 0;
-  if (logisticsStatus === "Picked") progressWidth = 0;
-  else if (logisticsStatus === "In Transit" || logisticsStatus === "LR Copy Received") progressWidth = 33;
-  else if (logisticsStatus === "Reached Warehouse") progressWidth = 66;
-  else if (logisticsStatus === "Delivered") progressWidth = 100;
+  if (logisticsStatus === "No Response") progressWidth = 0;
+  else if (logisticsStatus === "Acknowledged") progressWidth = 33;
+  else if (logisticsStatus === "Booked") progressWidth = 66;
+  else if (logisticsStatus === "Received") progressWidth = 100;
 
-  const handleStatusChange = async (newStatus, remarks = "") => {
+  const getTimelineDate = (statusName) => {
+    if (statusName === "No Response") {
+      return req.date;
+    }
+    const entry = req.history && req.history.find(h => h.status === statusName);
+    return entry ? entry.timestamp : null;
+  };
+
+  const handleStatusChange = async (newStatus, remarks = "", proofOfReceipt = null, proofOfReceiptName = "") => {
     if (!newStatus) return;
     const prevStatus = req.status;
 
@@ -1578,8 +1752,14 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
     const updatedReq = {
       ...req,
       status: newStatus,
-      history: updatedHistory
+      history: updatedHistory,
+      proofOfReceipt: proofOfReceipt || req.proofOfReceipt || null,
+      proofOfReceiptName: proofOfReceiptName || req.proofOfReceiptName || ""
     };
+
+    if (newStatus === "Received") {
+      updatedReq.actualDeliveryDate = new Date().toISOString();
+    }
 
     const saved = await apiService.updateRequest(requestId, updatedReq);
     state.setRequests(state.requests.map(r => r.id === requestId ? saved : r));
@@ -1588,9 +1768,8 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
     addNotification("Status Updated", `Order ${requestId} status is now ${newStatus}.`, "Both");
 
     let eventKey = "request.updated";
-    if (newStatus === "In Transit") eventKey = "request.transit";
-    else if (newStatus === "Reached Warehouse") eventKey = "warehouse.arrival";
-    else if (newStatus === "Delivered") eventKey = "request.delivered";
+    if (newStatus === "Booked") eventKey = "request.transit";
+    else if (newStatus === "Received") eventKey = "request.delivered";
 
     state.triggerWebhook(eventKey, saved);
   };
@@ -1603,7 +1782,7 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
     const fileExt = file.name.split('.').pop().toLowerCase();
     if (!allowedExtensions.includes(fileExt)) {
       state.showToast("Security Alert", "Unauthorized file type. Only PDF, Word, Excel, and image formats are allowed.", "success");
-      e.target.value = ""; // Clear file selector
+      e.target.value = "";
       return;
     }
 
@@ -1618,7 +1797,7 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
     reader.onloadend = async () => {
       const base64data = reader.result;
       const updatedHistory = [...req.history, {
-        status: "LR Copy Received",
+        status: "Booked",
         updatedBy: state.currentUser.name,
         role: state.currentUser.role,
         timestamp: new Date().toISOString(),
@@ -1627,7 +1806,7 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
 
       const updatedReq = {
         ...req,
-        status: "LR Copy Received",
+        status: "Booked",
         lrCopy: base64data,
         lrFileName: selectedFileName,
         history: updatedHistory
@@ -1636,9 +1815,9 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
       const saved = await apiService.updateRequest(requestId, updatedReq);
       state.setRequests(state.requests.map(r => r.id === requestId ? saved : r));
 
-      state.logEvent("Uploaded LR Consignment", req.status, "LR Copy Received", `Uploaded copy ${selectedFileName} for ${requestId}`);
-      addNotification("LR Copy Received", `LR Copy ${selectedFileName} has been uploaded for ${requestId}.`, "Both");
-      state.triggerWebhook("lr.uploaded", saved);
+      state.logEvent("Uploaded LR Consignment", req.status, "Booked", `Uploaded copy ${selectedFileName} for ${requestId}`);
+      addNotification("Order Booked", `LR Copy ${selectedFileName} has been uploaded. Status is now Booked.`, "Both");
+      state.triggerWebhook("status.changed", saved);
 
       setSelectedFile(null);
       setSelectedFileName("");
@@ -1661,11 +1840,12 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
     openModal();
   };
 
-  const handleVerifyDeliver = () => {
-    let remarks = "Physically verified and counted.";
+  const renderVerifyReceivedModal = (currentProof = null, currentProofName = "") => {
+    let remarks = "Physically verified and stacked in store.";
+    
     setModalContent(
       <div style={{ textAlign: 'left' }}>
-        <p style={{ fontSize: '13px', marginBottom: '12px' }}>Enter delivery verification remarks:</p>
+        <p style={{ fontSize: '13px', marginBottom: '12px' }}>Enter verification remarks:</p>
         <div className="form-group">
           <input 
             type="text" 
@@ -1675,123 +1855,58 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
             style={{ cursor: 'text' }}
           />
         </div>
+        
+        <div className="form-group" style={{ marginTop: '16px' }}>
+          <label>Proof of Receipt</label>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <button 
+              type="button"
+              className="btn-outlined-icon-edit" 
+              onClick={() => document.getElementById("proof-camera-input")?.click()}
+              style={{ backgroundColor: 'transparent', color: 'var(--primary-orange)', border: '1px solid var(--primary-orange)', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', height: '36px', boxSizing: 'border-box' }}
+            >
+              📸 Camera
+            </button>
+            <input id="proof-camera-input" type="file" accept="image/*" capture="environment" onChange={handleProofCamera} style={{ display: 'none' }} />
+            
+            <button 
+              type="button"
+              className="btn-outlined-icon-key" 
+              onClick={() => document.getElementById("proof-gallery-input")?.click()}
+              style={{ backgroundColor: 'transparent', color: 'var(--text-main)', border: '1px solid var(--text-main)', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', height: '36px', boxSizing: 'border-box' }}
+            >
+              📁 Gallery
+            </button>
+            <input id="proof-gallery-input" type="file" accept="image/*" onChange={handleProofGallery} style={{ display: 'none' }} />
+          </div>
+
+          {currentProof && (
+            <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '6px', background: '#f9f9f8', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--status-green)' }}>✓ Proof Attached ({currentProofName})</span>
+              <img src={currentProof} style={{ maxWidth: '100%', maxHeight: '120px', borderRadius: '6px', objectFit: 'contain', border: '1px solid var(--border-color)' }} alt="Proof preview" />
+            </div>
+          )}
+        </div>
+
         <button 
           className="btn-orange" 
           onClick={() => {
-            handleStatusChange("Delivered", remarks || "Physically verified and counted.");
+            handleStatusChange("Received", remarks || "Physically verified and stacked in store.", currentProof, currentProofName);
             closeModal();
           }} 
-          style={{ width: '100%', cursor: 'pointer' }}
+          style={{ width: '100%', cursor: 'pointer', marginTop: '14px' }}
         >
-          Confirm Delivery
+          Confirm Received
         </button>
       </div>,
-      "Verify & Mark Delivered"
+      "Verify & Mark Received"
     );
-    openModal();
   };
 
-  const openEditTimelineModal = () => {
-    let tempHistory = [...req.history];
-
-    const handleStageFieldChange = (index, field, value) => {
-      tempHistory = tempHistory.map((item, idx) => 
-        idx === index ? { ...item, [field]: value } : item
-      );
-      renderModalContent();
-    };
-
-    const handleSaveTimeline = async () => {
-      const latestStatus = tempHistory[tempHistory.length - 1]?.status || req.status;
-
-      const updatedReq = {
-        ...req,
-        status: latestStatus,
-        history: tempHistory
-      };
-
-      const saved = await apiService.updateRequest(requestId, updatedReq);
-      state.setRequests(state.requests.map(r => r.id === requestId ? saved : r));
-
-      state.logEvent("Edited Logistics Timeline", req.status, latestStatus, `Admin edited logistics timeline entries for ${requestId}.`);
-      closeModal();
-    };
-
-    const formatDateTimeLocal = (isoString) => {
-      try {
-        const d = new Date(isoString);
-        const tzOffset = d.getTimezoneOffset() * 60000;
-        return (new Date(d.getTime() - tzOffset)).toISOString().slice(0, 16);
-      } catch (e) {
-        return "";
-      }
-    };
-
-    const renderModalContent = () => {
-      setModalContent(
-        <div style={{ textAlign: 'left', maxHeight: '400px', overflowY: 'auto', padding: '0 4px' }}>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>
-            Modify the logistics timeline entries below. The order status will update to match the final timeline stage.
-          </p>
-
-          {tempHistory.map((item, idx) => (
-            <div key={idx} style={{ borderBottom: '1.5px solid var(--border-color)', paddingBottom: '14px', marginBottom: '14px' }}>
-              <div style={{ fontWeight: 'bold', fontSize: '13px', color: 'var(--primary-orange)', marginBottom: '8px' }}>
-                Stage #{idx + 1} ({item.updatedBy})
-              </div>
-              
-              <div className="form-group">
-                <label>Stage / Status</label>
-                <select 
-                  className="form-control" 
-                  value={item.status} 
-                  onChange={e => handleStageFieldChange(idx, "status", e.target.value)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {["Pending", "Approved", "Booked", "Acknowledged", "Picked", "In Transit", "LR Copy Received", "Reached Warehouse", "Delivered", "Rejected", "Delayed", "Cancelled"].map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label>Timestamp</label>
-                <input 
-                  type="datetime-local" 
-                  className="form-control" 
-                  value={formatDateTimeLocal(item.timestamp)} 
-                  onChange={e => handleStageFieldChange(idx, "timestamp", new Date(e.target.value).toISOString())}
-                  style={{ cursor: 'text' }}
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Remarks</label>
-                <textarea 
-                  className="form-control" 
-                  rows="2" 
-                  value={item.remarks || ""} 
-                  onChange={e => handleStageFieldChange(idx, "remarks", e.target.value)}
-                  style={{ resize: 'vertical', cursor: 'text' }}
-                ></textarea>
-              </div>
-            </div>
-          ))}
-
-          <button 
-            type="button" 
-            className="btn-orange" 
-            onClick={handleSaveTimeline}
-            style={{ width: '100%', padding: '12px', marginTop: '10px', cursor: 'pointer' }}
-          >
-            Save Timeline Changes
-          </button>
-        </div>,
-        "Edit Logistics Timeline"
-      );
-    };
-
-    renderModalContent();
+  const handleVerifyReceived = () => {
+    setProofFile(null);
+    setProofFileName("");
+    renderVerifyReceivedModal(null, "");
     openModal();
   };
 
@@ -1809,7 +1924,6 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
       </header>
 
       <div style={{ paddingTop: '10px' }}>
-        {/* Dedicated high-contrast status card block */}
         <div style={{ background: 'var(--dark-charcoal)', color: '#ffffff', borderRadius: '12px', padding: '16px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: 'var(--shadow-md)' }}>
           <div style={{ textAlign: 'left' }}>
             <div style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: '#a0978d', letterSpacing: '0.5px' }}>Current Order Status</div>
@@ -1818,44 +1932,14 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
           <span className={`status-badge ${req.status.toLowerCase().replace(/ /g, '')}`} style={{ padding: '8px 16px', fontSize: '13px', fontWeight: 'bold' }}>{req.status}</span>
         </div>
 
-        {/* Overdue/Delay alert boxes */}
-        {req.delayedStatus && req.status === "Delayed" && (
-          <div style={{ background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '12px', padding: '16px', marginBottom: '20px', textAlign: 'left', color: '#b91c1c', fontSize: '13px', boxShadow: 'var(--shadow-sm)' }}>
-            <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px' }}>
-              ⚠️ Order is Delayed ({req.delayedDays} Days Overdue)
-            </div>
-            <div style={{ fontSize: '12px', color: '#ef4444', marginTop: '6px', lineHeight: '1.4' }}>
-              Due Date was <b>{new Date(req.dueDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</b>.
-              <br />
-              Delay automatically detected. Delay started on <b>{new Date(req.delayStartDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</b>.
-            </div>
-          </div>
-        )}
-
-        {req.delayedStatus && req.status === "Delivered" && (
-          <div style={{ background: '#fffbeb', border: '1.5px solid #fef3c7', borderRadius: '12px', padding: '16px', marginBottom: '20px', textAlign: 'left', color: '#b45309', fontSize: '13px', boxShadow: 'var(--shadow-sm)' }}>
-            <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px' }}>
-              ⚠️ Delivered after Delay ({req.delayedDays} day(s) late)
-            </div>
-            <div style={{ fontSize: '12px', color: '#d97706', marginTop: '6px', lineHeight: '1.4' }}>
-              Delivered <b>{req.delayedDays} day(s) after the Due Date</b>.
-              <br />
-              Due Date: <b>{new Date(req.dueDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</b>
-              <br />
-              Actual Delivery Date: <b>{new Date(req.actualDeliveryDate).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</b>
-            </div>
-          </div>
-        )}
-
-        {/* Horizontal Timeline Progress Widget */}
         <div className="timeline-container" style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '20px', marginBottom: '20px' }}>
           <div className="timeline">
             <div style={{ position: 'absolute', top: '15px', left: '20px', right: '20px', height: '4px', zIndex: 2 }}>
               <div style={{ width: `${progressWidth}%`, height: '100%', backgroundColor: 'var(--status-green)', transition: 'width 0.4s ease' }}></div>
             </div>
             {trackingStages.map((stage, idx) => {
-              const isActive = stage === logisticsStatus;
-              const isCompleted = trackingStages.indexOf(logisticsStatus) >= idx;
+              const isActive = stage === (logisticsStatus === "No Response" ? "Order Placed" : logisticsStatus);
+              const isCompleted = trackingStages.indexOf(logisticsStatus === "No Response" ? "Order Placed" : logisticsStatus) >= idx;
               return (
                 <div key={stage} className={`timeline-step ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}>
                   <div className="timeline-dot">{idx + 1}</div>
@@ -1872,13 +1956,12 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
 
         {req.poNumber && <div style={{ fontSize: '12px', marginBottom: '14px', textAlign: 'left' }}><b>PO Ref:</b> {req.poNumber} ({formatDate(req.poDate)})</div>}
 
-        {req.suggestedSupplier && (
-          <div style={{ background: '#f9f9f8', padding: '12px', borderRadius: '8px', marginBottom: '14px', fontSize: '12px', textAlign: 'left', border: '1px solid var(--border-color)' }}>
-            <div style={{ fontWeight: '800', color: 'var(--primary-orange)', marginBottom: '6px' }}>Suggested Supplier Details:</div>
-            <div><b>Name:</b> {req.suggestedSupplier}</div>
-            {req.suggestedSupplierPhone && <div><b>Phone:</b> {req.suggestedSupplierPhone}</div>}
-            {req.suggestedSupplierEmail && <div><b>Email:</b> {req.suggestedSupplierEmail}</div>}
-            {req.suggestedSupplierRemarks && <div style={{ marginTop: '4px', fontStyle: 'italic', color: 'var(--text-muted)' }}><b>Remarks:</b> "{req.suggestedSupplierRemarks}"</div>}
+        {req.proofOfReceipt && (
+          <div style={{ background: '#f0fdf4', border: '1.5px solid #dcfce7', borderRadius: '12px', padding: '16px', marginBottom: '20px', textAlign: 'left' }}>
+            <div style={{ fontWeight: '850', color: 'var(--status-green)', fontSize: '12px', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.5px' }}>
+              ✓ Proof of Receipt Attached:
+            </div>
+            <img src={req.proofOfReceipt} style={{ maxWidth: '100%', maxHeight: '180px', borderRadius: '8px', border: '1px solid var(--border-color)', objectFit: 'contain' }} alt="Proof of Receipt" />
           </div>
         )}
 
@@ -1910,33 +1993,21 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
           </div>
         )}
 
-        <div className="timeline-container" style={{ textAlign: 'left' }}>
+        <div className="timeline-container" style={{ textAlign: 'left', marginBottom: '20px' }}>
           <h4 style={{ fontSize: '12px', fontWeight: '700', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Logistics timeline</h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative', paddingLeft: '24px', borderLeft: '2px solid var(--border-color)', marginLeft: '12px' }}>
-            {req.history && req.history.map((item, idx) => {
-              const allStatuses = [
-                { name: "Requested", icon: "Clock", color: "#eab308" },
-                { name: "Pending", icon: "Clock", color: "#eab308" },
-                { name: "Approved", icon: "Check", color: "#2563eb" },
-                { name: "PO Generated", icon: "Document", color: "#8b5cf6" },
-                { name: "Supplier Assigned", icon: "Users", color: "#8b5cf6" },
-                { name: "Booked", icon: "Document", color: "#8b5cf6" },
-                { name: "Acknowledged", icon: "Check", color: "#a855f7" },
-                { name: "Picked", icon: "Check", color: "#f97316" },
-                { name: "In Transit", icon: "Clock", color: "#0ea5e9" },
-                { name: "LR Copy Received", icon: "Document", color: "#06b6d4" },
-                { name: "Reached Warehouse", icon: "Home", color: "#10b981" },
-                { name: "Delivered", icon: "Check", color: "#15803d" },
-                { name: "Rejected", icon: "Warning", color: "#6b7280" },
-                { name: "Delayed", icon: "Warning", color: "#ef4444" },
-                { name: "Cancelled", icon: "Warning", color: "#6b7280" }
-              ];
-              const statusInfo = allStatuses.find(s => s.name.toLowerCase() === (item.status || "").toLowerCase()) || { name: item.status, icon: "Clock", color: "var(--primary-orange)" };
-              const IconComp = Icons[statusInfo.icon] || Icons.Clock;
-
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', position: 'relative', paddingLeft: '24px', borderLeft: '2px solid var(--border-color)', marginLeft: '12px' }}>
+            {[
+              { label: "Order Placed On", status: "No Response" },
+              { label: "Acknowledged On", status: "Acknowledged" },
+              { label: "Booked On", status: "Booked" },
+              { label: "Received On", status: "Received" }
+            ].map((stage, idx) => {
+              const date = getTimelineDate(stage.status);
+              const isCompleted = !!date;
+              const isCurrent = req.status === stage.status;
+              
               return (
                 <div key={idx} style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  {/* Indicator Dot */}
                   <div style={{ 
                     position: 'absolute', 
                     left: '-35px', 
@@ -1944,31 +2015,25 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
                     width: '20px', 
                     height: '20px', 
                     borderRadius: '50%', 
-                    backgroundColor: statusInfo.color, 
+                    backgroundColor: isCompleted ? 'var(--status-green)' : 'var(--text-muted)', 
                     color: 'white', 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center',
-                    border: '3px solid #ffffff',
+                    border: isCurrent ? '3.5px solid var(--primary-orange)' : '3px solid #ffffff',
+                    boxShadow: isCurrent ? '0 0 8px var(--primary-orange)' : 'none',
                     zIndex: 2
                   }}>
-                    <IconComp style={{ width: '10px', height: '10px' }} />
+                    {isCompleted ? <Icons.Check style={{ width: '10px', height: '10px' }} /> : <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#fff' }}></div>}
                   </div>
-                  {/* Content */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontWeight: '800', fontSize: '14px', color: 'var(--text-main)' }}>{item.status}</span>
-                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                      {new Date(item.timestamp).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                    </span>
+                    <span style={{ fontWeight: '800', fontSize: '14px', color: isCompleted ? 'var(--text-main)' : 'var(--text-muted)' }}>{stage.label}</span>
+                    {isCompleted && (
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        {new Date(date).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
                   </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    Updated by: <b>{item.updatedBy}</b> ({item.role})
-                  </div>
-                  {item.remarks && (
-                    <div style={{ fontSize: '11px', color: 'var(--text-main)', fontStyle: 'italic', background: '#f9f9f8', border: '1px solid var(--border-color)', padding: '6px 10px', borderRadius: '4px', marginTop: '2px' }}>
-                      "{item.remarks}"
-                    </div>
-                  )}
                 </div>
               );
             })}
@@ -1982,9 +2047,9 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
           </div>
         </div>
 
-        {req.status === "Reached Warehouse" && (
-          <button className="btn-dark" onClick={handleVerifyDeliver} style={{ backgroundColor: 'var(--status-green)', marginTop: '16px', cursor: 'pointer' }}>
-            Verify & Mark Delivered
+        {req.status === "Booked" && (
+          <button className="btn-orange" onClick={handleVerifyReceived} style={{ marginTop: '16px', cursor: 'pointer', width: '100%' }}>
+            Verify & Mark Received
           </button>
         )}
 
@@ -1994,8 +2059,8 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
               <label>Change status</label>
               <select className="form-control" onChange={e => handleStatusChange(e.target.value)} defaultValue="" style={{ cursor: 'pointer' }}>
                 <option value="" disabled>-- Choose New Status --</option>
-                {["Approved", "Booked", "Acknowledged", "Picked", "In Transit", "LR Copy Received", "Reached Warehouse", "Delivered", "Rejected", "Delayed", "Cancelled"].map(s => {
-                  const sequence = ["Pending", "Approved", "Booked", "Acknowledged", "Picked", "In Transit", "LR Copy Received", "Reached Warehouse", "Delivered"];
+                {["No Response", "Acknowledged", "Booked", "Received", "Rejected", "Cancelled"].map(s => {
+                  const sequence = ["No Response", "Acknowledged", "Booked", "Received"];
                   let currentIdx = sequence.indexOf(req.status);
                   if (currentIdx === -1 && req.history) {
                     for (let i = req.history.length - 1; i >= 0; i--) {
@@ -2021,6 +2086,8 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
                     } else if (targetIdx === currentIdx + 1) {
                       optionLabel = `${s} (Next Stage)`;
                     }
+                  } else if (s === "Rejected" || s === "Cancelled") {
+                    disabled = req.status === "Received";
                   } else {
                     disabled = true;
                   }
@@ -2037,60 +2104,8 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
                 })}
               </select>
             </div>
-            
-            <button 
-              type="button" 
-              className="btn-dark" 
-              onClick={openEditTimelineModal} 
-              style={{ padding: '10px', marginTop: '4px', cursor: 'pointer', backgroundColor: 'var(--text-main)' }}
-            >
-              ⚙ Edit Timeline Log History
-            </button>
           </div>
         )}
-        {/* Activity Logs & Comments History Section */}
-        <div style={{ marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
-          <h4 style={{ fontSize: '12px', fontWeight: '700', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'left' }}>Conversation & Activity History</h4>
-          
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px', maxHeight: '300px', overflowY: 'auto', paddingRight: '4px' }}>
-            {req.history && req.history.map((h, i) => {
-              const formattedTime = new Date(h.timestamp).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-              return (
-                <div key={i} style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-sm)', padding: '10px', fontSize: '12px', textAlign: 'left', alignSelf: h.updatedBy === state.currentUser.name ? 'flex-end' : 'flex-start', width: '85%' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontWeight: 'bold', color: 'var(--primary-orange)' }}>
-                    <span>{h.updatedBy} ({h.role})</span>
-                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{formattedTime}</span>
-                  </div>
-                  <div style={{ color: 'var(--text-main)', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{h.remarks}</div>
-                  {h.status !== req.history[i-1]?.status && (
-                    <div style={{ marginTop: '4px', fontSize: '10px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                      Status set to: {h.status}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Add Comments Form */}
-          <form onSubmit={handleSendComment} style={{ textAlign: 'left' }}>
-            <div className="form-group" style={{ marginBottom: '8px' }}>
-              <label>Add Comment</label>
-              <textarea
-                className="form-control"
-                placeholder="Type your comment/remarks here..."
-                rows="3"
-                value={newComment}
-                onChange={e => setNewComment(e.target.value)}
-                required
-                style={{ resize: 'vertical', width: '100%', cursor: 'text' }}
-              ></textarea>
-            </div>
-            <button type="submit" className="btn-orange" style={{ padding: '8px 16px', width: 'auto', display: 'inline-block', cursor: 'pointer' }}>
-              Send
-            </button>
-          </form>
-        </div>
       </div>
     </div>
   );
@@ -2527,8 +2542,8 @@ function SupplierForm({ supplier, onSave }) {
   const [validationError, setValidationError] = useState("");
 
   const handleSave = () => {
-    if (!company || !contact || !phone) {
-      setValidationError("Please fill in Company name, Contact person, and WhatsApp number.");
+    if (!company || !contact || !phone || !products.trim()) {
+      setValidationError("Please fill in Company name, Contact person, WhatsApp number, and Products Supplied.");
       return;
     }
     const data = {
@@ -2594,7 +2609,7 @@ function SupplierForm({ supplier, onSave }) {
         <input type="text" className="form-control" placeholder="Address" value={address} onChange={e => setAddress(e.target.value)} />
       </div>
       <div className="form-group">
-        <label>Products Supplied (Optional)</label>
+        <label>Products Supplied</label>
         <input type="text" className="form-control" placeholder="Products Supplied (e.g. bearings, valves)" value={products} onChange={e => setProducts(e.target.value)} />
       </div>
       <div className="form-group">
@@ -2773,11 +2788,21 @@ export function OrderHistoryView({ state, navigateTo }) {
   const user = state.currentUser;
   const isEmployee = user.role === "Employee";
 
-  const historyStatuses = ["Delivered", "Rejected"];
-  
-  const filteredRequests = isEmployee 
-    ? state.requests.filter(r => r.employeeName === user.name && historyStatuses.includes(r.status)) 
-    : state.requests.filter(r => historyStatuses.includes(r.status));
+  const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
+  const isWithin14Days = (dateIso) => {
+    if (!dateIso) return true;
+    return (new Date() - new Date(dateIso)) <= fourteenDaysMs;
+  };
+
+  const filteredRequests = state.requests.filter(r => {
+    if (isEmployee && r.employeeName !== user.name) return false;
+    
+    // Include Received if more than 14 days ago
+    if (r.status === "Received" && !isWithin14Days(r.actualDeliveryDate)) {
+      return true;
+    }
+    return r.status === "Rejected" || r.status === "Cancelled";
+  });
 
   const sorted = [...filteredRequests].sort((a, b) => {
     return new Date(b.date) - new Date(a.date);
@@ -2821,11 +2846,6 @@ export function OrderHistoryView({ state, navigateTo }) {
                 <div className="card-status-line">
                   <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>{req.id}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {req.delayedStatus && (
-                      <span style={{ color: '#b45309', fontWeight: '700', fontSize: '11px', background: '#fffbeb', border: '1px solid #fef3c7', padding: '2px 6px', borderRadius: '4px' }}>
-                        ⚠️ Delayed Delivery ({req.delayedDays}d)
-                      </span>
-                    )}
                     <span className={`status-badge ${req.status.toLowerCase().replace(/ /g, '')}`}>{req.status}</span>
                   </div>
                 </div>
