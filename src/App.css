@@ -820,7 +820,7 @@ body {
 .bottom-nav {
   pointer-events: auto;
   background-color: var(--dark-charcoal);
-  border-radius: var(--border-radius-lg);
+  border-radius: 36px;
   padding: 6px;
   display: flex;
   justify-content: space-between;
@@ -836,7 +836,7 @@ body {
   justify-content: center;
   gap: 8px;
   height: 48px;
-  border-radius: var(--border-radius-lg);
+  border-radius: 28px;
   color: #a0978d;
   text-decoration: none;
   font-size: 13px;

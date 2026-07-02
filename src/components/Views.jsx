@@ -109,12 +109,12 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
 
   return (
     <div>
-      <header className="app-header">
+      <header className="app-header" style={{ marginBottom: '24px' }}>
         <div className="header-left">
-          <h1>{state.branding.logoText}</h1>
+          <h1 style={{ fontSize: '32px', fontWeight: '800', color: 'var(--text-main)' }}>Dashboard</h1>
         </div>
         <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <button className="bell-btn" onClick={openNotifications} style={{ cursor: 'pointer' }}>
+          <button className="bell-btn" onClick={openNotifications} style={{ cursor: 'pointer', border: 'none', background: 'none' }}>
             {hasUnread && <span className="bell-badge"></span>}
             <Icons.Bell />
           </button>
@@ -124,88 +124,131 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
         </div>
       </header>
 
-      <div className="greeting-container">
-        <div className="greeting-text">{greetingMsg}, {user.name} 👋</div>
-        <div className="greeting-user">{welcomeAlert}</div>
-      </div>
-
       {/* 1. Requested Orders Card */}
-      <div className="stat-card" onClick={() => navigateTo(isEmployee ? '#pending-orders' : '#requested-orders')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', padding: '16px', background: '#fff7ed', border: '1.5px solid #ffedd5', borderRadius: 'var(--border-radius-md)', marginBottom: '16px', width: '100%', boxSizing: 'border-box' }}>
+      <div 
+        className="stat-card" 
+        onClick={() => navigateTo(isEmployee ? '#pending-orders' : '#requested-orders')} 
+        style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          cursor: 'pointer', 
+          padding: '24px', 
+          background: '#ffffff', 
+          border: '1px solid var(--border-color)', 
+          borderRadius: '16px', 
+          marginBottom: '16px', 
+          width: '100%', 
+          boxSizing: 'border-box',
+          boxShadow: 'var(--shadow-sm)'
+        }}
+      >
         <div style={{ textAlign: 'left' }}>
-          <div style={{ fontSize: '13px', fontWeight: '800', color: '#ea580c', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Requested Orders</div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Awaiting Approval Review</div>
+          <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--text-main)', lineHeight: '1.2' }}>
+            Requested<br />orders
+          </div>
         </div>
-        <div style={{ fontSize: '24px', fontWeight: '800', color: '#c2410c' }}>{pendingCount}</div>
+        <div style={{ fontSize: '32px', fontWeight: '800', color: 'var(--text-main)' }}>{pendingCount}</div>
       </div>
 
       {/* 2. Live Orders Card */}
-      <div className="stat-card" onClick={() => navigateTo('#live-orders')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', cursor: 'pointer', padding: '16px', background: 'var(--card-bg)', border: '1.5px solid var(--border-color)', borderRadius: 'var(--border-radius-md)', marginBottom: '16px', gap: '12px', width: '100%', boxSizing: 'border-box' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-main)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Live Orders</div>
-          <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--primary-orange)' }}>{totalLiveCount}</div>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
-          <div style={{ textAlign: 'center', background: '#fef2f2', border: '1px solid #fee2e2', padding: '8px 4px', borderRadius: '8px' }}>
-            <div style={{ fontSize: '14px' }}>🔴</div>
-            <div style={{ fontSize: '16px', fontWeight: '800', color: '#b91c1c', marginTop: '2px' }}>{noResponseCount}</div>
-            <div style={{ fontSize: '9px', fontWeight: '700', color: '#ef4444', textTransform: 'uppercase', marginTop: '2px' }}>No Resp</div>
-          </div>
-          <div style={{ textAlign: 'center', background: '#fff7ed', border: '1px solid #ffedd5', padding: '8px 4px', borderRadius: '8px' }}>
-            <div style={{ fontSize: '14px' }}>🟠</div>
-            <div style={{ fontSize: '16px', fontWeight: '800', color: '#c2410c', marginTop: '2px' }}>{acknowledgedCount}</div>
-            <div style={{ fontSize: '9px', fontWeight: '700', color: '#ea580c', textTransform: 'uppercase', marginTop: '2px' }}>Ack</div>
-          </div>
-          <div style={{ textAlign: 'center', background: '#eff6ff', border: '1px solid #bfdbfe', padding: '8px 4px', borderRadius: '8px' }}>
-            <div style={{ fontSize: '14px' }}>🔵</div>
-            <div style={{ fontSize: '16px', fontWeight: '800', color: '#1e40af', marginTop: '2px' }}>{bookedCount}</div>
-            <div style={{ fontSize: '9px', fontWeight: '700', color: '#3b82f6', textTransform: 'uppercase', marginTop: '2px' }}>Booked</div>
-          </div>
-          <div style={{ textAlign: 'center', background: '#f0fdf4', border: '1px solid #dcfce7', padding: '8px 4px', borderRadius: '8px' }}>
-            <div style={{ fontSize: '14px' }}>🟢</div>
-            <div style={{ fontSize: '16px', fontWeight: '800', color: '#15803d', marginTop: '2px' }}>{receivedCount}</div>
-            <div style={{ fontSize: '9px', fontWeight: '700', color: '#16a34a', textTransform: 'uppercase', marginTop: '2px' }}>Recd</div>
-          </div>
+      <div 
+        className="stat-card" 
+        onClick={() => navigateTo('#live-orders')} 
+        style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          cursor: 'pointer', 
+          padding: '24px', 
+          background: '#ffffff', 
+          border: '1px solid var(--border-color)', 
+          borderRadius: '16px', 
+          marginBottom: '16px', 
+          width: '100%', 
+          boxSizing: 'border-box',
+          boxShadow: 'var(--shadow-sm)'
+        }}
+      >
+        <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--text-main)' }}>Live Orders</div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#ef4444', color: '#ffffff', minWidth: '36px', height: '36px', borderRadius: '6px', fontSize: '15px', fontWeight: '800', padding: '0 8px', boxSizing: 'border-box' }}>{noResponseCount}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#f97316', color: '#ffffff', minWidth: '36px', height: '36px', borderRadius: '6px', fontSize: '15px', fontWeight: '800', padding: '0 8px', boxSizing: 'border-box' }}>{acknowledgedCount}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#2563eb', color: '#ffffff', minWidth: '36px', height: '36px', borderRadius: '6px', fontSize: '15px', fontWeight: '800', padding: '0 8px', boxSizing: 'border-box' }}>{bookedCount}</span>
         </div>
       </div>
 
       {/* 3. Create Request Button */}
-      <button className="btn-orange" onClick={() => navigateTo('#create-request')} style={{ cursor: 'pointer', marginBottom: '24px' }}>
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: '6px' }}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+      <button 
+        className="btn-dark" 
+        onClick={() => navigateTo('#create-request')} 
+        style={{ 
+          width: '100%', 
+          height: '56px', 
+          borderRadius: '16px', 
+          backgroundColor: '#2a2726', 
+          color: '#ffffff', 
+          fontSize: '18px', 
+          fontWeight: '700', 
+          border: 'none', 
+          cursor: 'pointer', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          marginBottom: '24px', 
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' 
+        }}
+      >
         Create Request
       </button>
 
       {/* 4. Smart View Card */}
-      <div className={`smart-view-container ${smartOpen ? 'expanded' : ''}`} style={{ marginBottom: '16px' }}>
+      <div 
+        className={`smart-view-container ${smartOpen ? 'expanded' : ''}`} 
+        style={{ 
+          marginBottom: '16px', 
+          borderRadius: '16px', 
+          border: '1.5px solid #ffd8a8', 
+          overflow: 'hidden' 
+        }}
+      >
         <div 
           onClick={() => setSmartOpen(!smartOpen)} 
           style={{ 
             display: 'flex', 
             justifyContent: 'space-between', 
             alignItems: 'center', 
-            padding: '16px', 
+            padding: '16px 20px', 
             cursor: 'pointer',
-            background: 'var(--card-bg)'
+            background: '#ffffff'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '16px' }}>✨</span>
-            <span style={{ fontWeight: '800', fontSize: '13px', color: 'var(--text-main)', letterSpacing: '0.7px', textTransform: 'uppercase' }}>Smart View</span>
-          </div>
-          <svg 
-            viewBox="0 0 24 24" 
-            width="18" 
-            height="18" 
-            fill="none" 
-            stroke="currentColor" 
-            strokeWidth="2.5"
+          <span style={{ fontWeight: '800', fontSize: '20px', color: 'var(--text-main)', letterSpacing: '0.5px' }}>SMART VIEW</span>
+          <div 
             style={{ 
-              transform: smartOpen ? 'rotate(180deg)' : 'rotate(0deg)', 
+              width: '40px', 
+              height: '40px', 
+              borderRadius: '50%', 
+              backgroundColor: 'var(--primary-orange)', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              transform: smartOpen ? 'rotate(180deg)' : 'rotate(0deg)',
               transition: 'transform 0.3s ease',
-              color: 'var(--text-muted)'
+              boxShadow: 'var(--shadow-sm)'
             }}
           >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
+            <svg 
+              viewBox="0 0 24 24" 
+              width="20" 
+              height="20" 
+              fill="none" 
+              stroke="#ffffff" 
+              strokeWidth="3"
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </div>
         </div>
         
         <div 
@@ -213,60 +256,48 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
             maxHeight: smartOpen ? '320px' : '0px', 
             overflow: 'hidden', 
             transition: 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-            background: 'var(--card-bg)',
-            borderTop: smartOpen ? '1px solid var(--border-color)' : 'none'
+            background: '#ffffff',
+            borderTop: smartOpen ? '1.5px solid #f6f5f4' : 'none'
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', padding: '8px 0' }}>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
             <div 
-              onClick={() => navigateTo('#live-orders?filter=noresponse')}
-              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}
+              onClick={() => navigateTo('#live-orders?filter=acknowledged')}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', cursor: 'pointer', borderBottom: '1.5px solid #f6f5f4' }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '14px' }}>🔴</span>
-                <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-main)' }}>No Response</span>
-              </div>
-              <span style={{ background: '#fef2f2', color: '#b91c1c', fontWeight: '800', fontSize: '12px', padding: '2px 8px', borderRadius: '12px', border: '1px solid #fee2e2' }}>
-                {noResponseCount} orders
+              <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-main)' }}>Acknowledged</span>
+              <span style={{ background: '#f5efe9', color: '#2a2726', fontWeight: '800', fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%' }}>
+                {acknowledgedCount}
               </span>
             </div>
 
             <div 
-              onClick={() => navigateTo('#live-orders?filter=acknowledged')}
-              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}
+              onClick={() => navigateTo('#live-orders?filter=noresponse')}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', cursor: 'pointer', borderBottom: '1.5px solid #f6f5f4' }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '14px' }}>🟠</span>
-                <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-main)' }}>Acknowledged</span>
-              </div>
-              <span style={{ background: '#fff7ed', color: '#c2410c', fontWeight: '800', fontSize: '12px', padding: '2px 8px', borderRadius: '12px', border: '1px solid #ffedd5' }}>
-                {acknowledgedCount} orders
+              <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-main)' }}>Not Acknowledged</span>
+              <span style={{ background: '#f5efe9', color: '#2a2726', fontWeight: '800', fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%' }}>
+                {noResponseCount}
               </span>
             </div>
 
             <div 
               onClick={() => navigateTo('#live-orders?filter=booked')}
-              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)' }}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', cursor: 'pointer', borderBottom: '1.5px solid #f6f5f4' }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '14px' }}>🔵</span>
-                <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-main)' }}>Booked</span>
-              </div>
-              <span style={{ background: '#eff6ff', color: '#1e40af', fontWeight: '800', fontSize: '12px', padding: '2px 8px', borderRadius: '12px', border: '1px solid #bfdbfe' }}>
-                {bookedCount} orders
+              <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-main)' }}>Booked</span>
+              <span style={{ background: '#f5efe9', color: '#2a2726', fontWeight: '800', fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%' }}>
+                {bookedCount}
               </span>
             </div>
 
             <div 
               onClick={() => navigateTo('#live-orders?filter=received')}
-              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', cursor: 'pointer' }}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', cursor: 'pointer' }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontSize: '14px' }}>🟢</span>
-                <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-main)' }}>Received</span>
-              </div>
-              <span style={{ background: '#f0fdf4', color: '#15803d', fontWeight: '800', fontSize: '12px', padding: '2px 8px', borderRadius: '12px', border: '1px solid #dcfce7' }}>
-                {receivedCount} orders
+              <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-main)' }}>Recieved</span>
+              <span style={{ background: '#f5efe9', color: '#2a2726', fontWeight: '800', fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%' }}>
+                {receivedCount}
               </span>
             </div>
           </div>
@@ -274,8 +305,24 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
       </div>
 
       {/* 5. Order History Card */}
-      <div className="menu-card" onClick={() => navigateTo('#order-history')} style={{ cursor: 'pointer', marginTop: '16px' }}>
-        <span className="menu-card-title">Order history</span>
+      <div 
+        className="menu-card" 
+        onClick={() => navigateTo('#order-history')} 
+        style={{ 
+          cursor: 'pointer', 
+          marginTop: '16px',
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          padding: '20px 24px', 
+          background: '#ffffff', 
+          border: '1px solid var(--border-color)', 
+          borderRadius: '16px', 
+          width: '100%', 
+          boxSizing: 'border-box'
+        }}
+      >
+        <span style={{ fontSize: '20px', fontWeight: '800', color: 'var(--text-main)' }}>Order history</span>
         <Icons.ChevronRight />
       </div>
     </div>
