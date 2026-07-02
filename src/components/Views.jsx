@@ -733,7 +733,7 @@ export function CreateRequestView({ state, navigateTo, addNotification, openModa
               <option value="Box">Box</option>
               <option value="Meter">Meter</option>
               <option value="Nos">Nos</option>
-              <option value="Feet (ft)">Feet (ft)</option>
+              <option value="Feet">Feet</option>
             </select>
             {errors.units && <div style={{ color: 'var(--status-red)', fontSize: '11px', marginTop: '4px', textAlign: 'left' }}>{errors.units}</div>}
           </div>
@@ -1018,11 +1018,6 @@ export function SupplierPicker({ suppliers, currentSupplierId, onSelect, product
                         <span key={i} style={{ color: i < (sup.rating || 5) ? '#fbbf24' : '#d1d5db', fontSize: '13px' }}>★</span>
                       ))}
                     </div>
-                    {isNewest && (
-                      <span style={{ background: '#dcfce7', color: '#15803d', fontSize: '10px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '4px', border: '1px solid #bbf7d0' }}>
-                        Recently Added
-                      </span>
-                    )}
                   </div>
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>Contact: {sup.contactPerson} | WA: {sup.whatsappNumber}</div>
@@ -1323,25 +1318,26 @@ export function RequestedOrdersView({ state, navigateTo, addNotification, openMo
                           const match = state.suppliers.find(s => s.companyName.toLowerCase() === req.suggestedSupplier.toLowerCase());
                           if (match) {
                             updateCardField(req.id, "supplierId", match.id);
-                            state.showToast("Supplier Accepted", `Auto-populated with ${match.companyName}`, "info");
+                            setIgnoredSuggestions(prev => ({ ...prev, [req.id]: true }));
+                            state.showToast("Supplier Approved", `Auto-populated with ${match.companyName}`, "info");
                           } else {
                             state.showToast("Supplier Match Failed", `No registered supplier matching "${req.suggestedSupplier}"`, "success");
                           }
                         }}
                         style={{ padding: '6px 12px', fontSize: '11px', cursor: 'pointer', flex: 1, height: '32px' }}
                       >
-                        ✓ Accept Suggested Supplier
+                        ✓ Approve suggested
                       </button>
                       <button 
                         type="button" 
                         className="btn-dark" 
                         onClick={() => {
                           setIgnoredSuggestions(prev => ({ ...prev, [req.id]: true }));
-                          state.showToast("Suggestion Ignored", "You can manually select the supplier.", "info");
+                          state.showToast("Suggestion Rejected", "You can manually select the supplier.", "info");
                         }}
                         style={{ padding: '6px 12px', fontSize: '11px', cursor: 'pointer', flex: 1, height: '32px', backgroundColor: 'var(--text-muted)' }}
                       >
-                        ✕ Ignore Suggestion
+                        ✕ Reject suggested
                       </button>
                     </div>
                   </div>
@@ -1981,19 +1977,47 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
 
         <div className="timeline-container" style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '20px', marginBottom: '20px' }}>
           <div className="timeline">
-            <div style={{ position: 'absolute', top: '15px', left: '20px', right: '20px', height: '4px', zIndex: 2 }}>
-              <div style={{ width: `${progressWidth}%`, height: '100%', backgroundColor: 'var(--status-green)', transition: 'width 0.4s ease' }}></div>
-            </div>
-            {trackingStages.map((stage, idx) => {
-              const isActive = stage === (logisticsStatus === "No Response" ? "Order Placed" : logisticsStatus);
-              const isCompleted = trackingStages.indexOf(logisticsStatus === "No Response" ? "Order Placed" : logisticsStatus) >= idx;
+            {(() => {
+              const trackingStageColors = {
+                "Order Placed": "#ef4444",
+                "Acknowledged": "#f97316",
+                "Booked": "#3b82f6",
+                "Received": "#10b981"
+              };
+              const currentStageColor = trackingStageColors[
+                logisticsStatus === "No Response" ? "Order Placed" : logisticsStatus
+              ] || "#ef4444";
+              
               return (
-                <div key={stage} className={`timeline-step ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}>
-                  <div className="timeline-dot">{idx + 1}</div>
-                  <div className="timeline-label">{stage}</div>
-                </div>
+                <>
+                  <div style={{ position: 'absolute', top: '15px', left: '20px', right: '20px', height: '4px', zIndex: 2 }}>
+                    <div style={{ width: `${progressWidth}%`, height: '100%', backgroundColor: currentStageColor, transition: 'width 0.4s ease' }}></div>
+                  </div>
+                  {trackingStages.map((stage, idx) => {
+                    const isActive = stage === (logisticsStatus === "No Response" ? "Order Placed" : logisticsStatus);
+                    const isCompleted = trackingStages.indexOf(logisticsStatus === "No Response" ? "Order Placed" : logisticsStatus) >= idx;
+                    const stageColor = trackingStageColors[stage] || "var(--status-green)";
+                    
+                    return (
+                      <div key={stage} className={`timeline-step ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}>
+                        <div 
+                          className="timeline-dot"
+                          style={{
+                            backgroundColor: isCompleted ? stageColor : 'var(--card-bg)',
+                            borderColor: isCompleted ? stageColor : 'var(--border-color)',
+                            color: isCompleted ? '#ffffff' : 'var(--text-muted)',
+                            boxShadow: isActive ? `0 0 0 4px ${stageColor}40` : 'none'
+                          }}
+                        >
+                          {idx + 1}
+                        </div>
+                        <div className="timeline-label">{stage}</div>
+                      </div>
+                    );
+                  })}
+                </>
               );
-            })}
+            })()}
           </div>
         </div>
 
@@ -2053,6 +2077,14 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
               const isCompleted = !!date;
               const isCurrent = req.status === stage.status;
               
+              const stageColors = {
+                "No Response": "#ef4444",
+                "Acknowledged": "#f97316",
+                "Booked": "#3b82f6",
+                "Received": "#10b981"
+              };
+              const dotColor = stageColors[stage.status] || "var(--status-green)";
+              
               return (
                 <div key={idx} style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <div style={{ 
@@ -2062,13 +2094,13 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
                     width: '20px', 
                     height: '20px', 
                     borderRadius: '50%', 
-                    backgroundColor: isCompleted ? 'var(--status-green)' : 'var(--text-muted)', 
+                    backgroundColor: isCompleted ? dotColor : 'var(--text-muted)', 
                     color: 'white', 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center',
-                    border: isCurrent ? '3.5px solid var(--primary-orange)' : '3px solid #ffffff',
-                    boxShadow: isCurrent ? '0 0 8px var(--primary-orange)' : 'none',
+                    border: isCurrent ? `3.5px solid ${dotColor}` : '3px solid #ffffff',
+                    boxShadow: isCurrent ? `0 0 8px ${dotColor}` : 'none',
                     zIndex: 2
                   }}>
                     {isCompleted ? <Icons.Check style={{ width: '10px', height: '10px' }} /> : <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#fff' }}></div>}
@@ -2413,7 +2445,7 @@ export function SettingsView({ state, navigateTo, openModal, closeModal, setModa
             <UserAvatar user={user} size={48} />
             <div style={{ textAlign: 'left' }}>
               <div style={{ fontWeight: '800', fontSize: '16px', color: 'var(--text-main)' }}>{user.name}</div>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{user.role} ({user.department})</div>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{user.role}</div>
             </div>
           </div>
           <Icons.ChevronRight />
@@ -2439,16 +2471,6 @@ export function SettingsView({ state, navigateTo, openModal, closeModal, setModa
               <div className="settings-item-left">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" style={{ color: 'var(--primary-orange)' }}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
                 <span className="settings-title">User Management</span>
-              </div>
-              <Icons.ChevronRight />
-            </div>
-          )}
-
-          {isMainAdmin && (
-            <div className="settings-item" onClick={() => navigateTo('#settings/departments')} style={{ cursor: 'pointer' }}>
-              <div className="settings-item-left">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" style={{ color: 'var(--primary-orange)' }}><rect x="3" y="3" width="7" height="9" /><rect x="14" y="3" width="7" height="5" /><rect x="14" y="12" width="7" height="9" /><rect x="3" y="16" width="7" height="5" /></svg>
-                <span className="settings-title">Department Management</span>
               </div>
               <Icons.ChevronRight />
             </div>
