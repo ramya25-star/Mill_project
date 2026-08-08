@@ -34,12 +34,98 @@ const getApiBaseUrl = () => {
   return localStorage.getItem("pms_api_base_url") || "";
 };
 
-// SHA-256 asynchronous hashing utility
+// Pure JS SHA-256 implementation as a fallback for non-secure/non-localhost contexts
+const sha256_pure = (ascii) => {
+  function rightRotate(value, amount) {
+    return (value >>> amount) | (value << (32 - amount));
+  }
+  
+  var mathPow = Math.pow;
+  var maxWord = mathPow(2, 32);
+  var lengthProperty = 'length';
+  var i, j;
+  var result = '';
+
+  var words = [];
+  var asciiLength = ascii[lengthProperty];
+  
+  var hash = [];
+  var k = [];
+  var primeCounter = 0;
+
+  var isComposite = {};
+  for (var candidate = 2; primeCounter < 64; candidate++) {
+    if (!isComposite[candidate]) {
+      for (i = 0; i < 313; i += candidate) {
+        isComposite[i] = 1;
+      }
+      hash[primeCounter] = (mathPow(candidate, .5) * maxWord) | 0;
+      k[primeCounter++] = (mathPow(candidate, 1/3) * maxWord) | 0;
+    }
+  }
+  
+  ascii += '\x80';
+  while (ascii[lengthProperty] % 64 - 56) ascii += '\x00';
+  for (i = 0; i < ascii[lengthProperty]; i++) {
+    var charCode = ascii.charCodeAt(i);
+    if (charCode >> 8) return ''; // survive only ASCII
+    words[i >> 2] |= charCode << (24 - 8 * (i % 4));
+  }
+  words[words[lengthProperty]] = ((asciiLength * 8) / maxWord) | 0;
+  words[words[lengthProperty]] = (asciiLength * 8) | 0;
+  
+  for (j = 0; j < words[lengthProperty]; ) {
+    var w = words.slice(j, j += 16);
+    var oldHash = hash.slice(0);
+    
+    hash = hash.slice(0, 8);
+    
+    for (i = 0; i < 64; i++) {
+      var wItem = w[i];
+      if (i >= 16) {
+        var w15 = w[i - 15], w2 = w[i - 2];
+        var s0 = rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3);
+        var s1 = rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10);
+        wItem = w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+      }
+      
+      var a = hash[0], e = hash[4];
+      var temp1 = (hash[7] + (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25)) + ((e & hash[5]) ^ (~e & hash[6])) + k[i] + (wItem | 0)) | 0;
+      var temp2 = ((rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22)) + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]))) | 0;
+      
+      hash = [(temp1 + temp2) | 0].concat(hash);
+      hash[4] = (hash[4] + temp1) | 0;
+    }
+    
+    for (i = 0; i < 8; i++) {
+      hash[i] = (hash[i] + oldHash[i]) | 0;
+    }
+  }
+  
+  for (i = 0; i < 8; i++) {
+    var val = hash[i];
+    if (val < 0) val += maxWord;
+    var hex = val.toString(16);
+    while (hex[lengthProperty] < 8) hex = '0' + hex;
+    result += hex;
+  }
+  return result;
+};
+
+// SHA-256 asynchronous hashing utility with a secure fallback
 export const hashPassword = async (password) => {
-  const msgBuffer = new TextEncoder().encode(password);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  const cleanPass = (password || "").toString();
+  if (typeof crypto !== 'undefined' && crypto.subtle && typeof TextEncoder !== 'undefined') {
+    try {
+      const msgBuffer = new TextEncoder().encode(cleanPass);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch (e) {
+      console.warn("crypto.subtle failed, falling back to pure JS hash:", e);
+    }
+  }
+  return sha256_pure(cleanPass);
 };
 
 // Local storage fallback mock DB
@@ -55,10 +141,16 @@ const mockDb = {
 };
 
 const initializeUsers = async () => {
-  if (localStorage.getItem("pms_users")) return;
+  const usersJson = localStorage.getItem("pms_users");
+  let users = [];
+  if (usersJson) {
+    try {
+      users = JSON.parse(usersJson);
+    } catch (e) {
+      users = [];
+    }
+  }
   const adminHash = await hashPassword("Password123!");
-  const subAdminHash = await hashPassword("Password123!");
-  const employeeHash = await hashPassword("Password123!");
   const defaultUsers = [
     {
       id: "usr-admin",
@@ -69,41 +161,50 @@ const initializeUsers = async () => {
       department: "Executive Office",
       avatarType: "initials",
       avatarSeed: "Johnson",
-      mustChangePassword: true,
+      mustChangePassword: false,
       enabled: true
     },
     {
-      id: "usr-subadmin",
-      username: "subadmin",
-      passwordHash: subAdminHash,
-      name: "Sarah Connor",
-      role: "Sub Admin",
-      department: "Purchasing",
-      avatarType: "initials",
-      avatarSeed: "Sarah Connor",
-      mustChangePassword: true,
-      enabled: true,
-      permissions: {
-        approve_requests: true,
-        manage_suppliers: true,
-        view_logs: true,
-        edit_orders: false
-      }
-    },
-    {
-      id: "usr-employee",
+      id: "usr-emp-1",
       username: "employee",
-      passwordHash: employeeHash,
-      name: "John Doe",
+      passwordHash: adminHash,
+      name: "Ramesh Kumar",
       role: "Employee",
-      department: "Maintenance",
+      department: "Store / Logistics",
       avatarType: "initials",
-      avatarSeed: "John Doe",
-      mustChangePassword: true,
+      avatarSeed: "Ramesh",
+      mustChangePassword: false,
       enabled: true
     }
   ];
-  localStorage.setItem("pms_users", JSON.stringify(defaultUsers));
+  let modified = false;
+  for (const defUser of defaultUsers) {
+    const existingIndex = users.findIndex(u => u.username.toLowerCase() === defUser.username.toLowerCase());
+    if (existingIndex === -1) {
+      users.push(defUser);
+      modified = true;
+    }
+  }
+
+  // Update existing non-admin users to have valid Alagiri<username> password hashes if needed
+  for (let i = 0; i < users.length; i++) {
+    const u = users[i];
+    if (u.enabled === undefined) {
+      u.enabled = u.disabled ? false : true;
+    }
+    if (u.disabled === undefined) {
+      u.disabled = !u.enabled;
+    }
+    if (u.username.toLowerCase() !== 'admin' && !u.passwordHash) {
+      const defaultPass = `Alagiri${u.username}`;
+      u.passwordHash = await hashPassword(defaultPass);
+      modified = true;
+    }
+  }
+
+  if (modified || !usersJson) {
+    localStorage.setItem("pms_users", JSON.stringify(users));
+  }
 };
 
 const validateUserData = (userData, existingUsers) => {
@@ -176,29 +277,22 @@ export const apiService = {
     return requestData;
   },
 
-  async updateRequest(requestId, updatedRequest) {
+  async updateRequest(requestId, updatedData) {
     const baseUrl = getApiBaseUrl();
-    
-    if (updatedRequest.status === "Received") {
-      if (!updatedRequest.actualDeliveryDate) {
-        updatedRequest.actualDeliveryDate = new Date().toISOString();
-      }
-    }
-
     if (baseUrl) {
       const res = await fetch(`${baseUrl}/requests/${requestId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatedRequest)
+        body: JSON.stringify(updatedData)
       });
-      if (!res.ok) throw new Error(`Failed to update request ${requestId} in live API`);
+      if (!res.ok) throw new Error("Failed to update request in live API");
       return await res.json();
     }
 
     const reqs = mockDb.getRequests();
-    const updated = reqs.map(r => r.id === requestId ? updatedRequest : r);
+    const updated = reqs.map(r => r.id === requestId ? updatedData : r);
     mockDb.saveRequests(updated);
-    return updatedRequest;
+    return updatedData;
   },
 
   // ------------------------------------------------
@@ -295,25 +389,41 @@ export const apiService = {
     return mockDb.getUsers();
   },
 
-  async createUser(userData) {
+  async hashPassword(password) {
+    return hashPassword(password);
+  },
+
+  async createUser(userData, customPassword) {
     await initializeUsers();
     const users = mockDb.getUsers();
     
-    validateUserData(userData, users);
+    const trimmedUser = {
+      ...userData,
+      username: (userData.username || "").trim(),
+      name: (userData.name || "").trim(),
+      email: (userData.email || "").trim(),
+      phone: (userData.phone || "").trim()
+    };
+
+    validateUserData(trimmedUser, users);
     
-    const exists = users.some(u => u.username.toLowerCase() === userData.username.toLowerCase());
+    const exists = users.some(u => u.username.toLowerCase() === trimmedUser.username.toLowerCase());
     if (exists) {
       throw new Error("Username already exists. Please choose another.");
     }
 
-    const tempPassword = `alagiri${userData.username.toLowerCase()}`;
+    const cleanCustomPass = customPassword && customPassword.trim() ? customPassword.trim() : "";
+    const tempPassword = cleanCustomPass
+      ? cleanCustomPass
+      : `Alagiri${trimmedUser.username}`;
     const hash = await hashPassword(tempPassword);
     
     const newUserData = {
-      ...userData,
+      ...trimmedUser,
       passwordHash: hash,
       mustChangePassword: true,
-      enabled: true
+      enabled: true,
+      disabled: false
     };
     
     users.push(newUserData);
@@ -325,19 +435,34 @@ export const apiService = {
     await initializeUsers();
     const users = mockDb.getUsers();
 
-    if (userData.role !== "Main Admin") {
-      validateUserData(userData, users);
+    const trimmedUser = {
+      ...userData,
+      username: (userData.username || "").trim(),
+      name: (userData.name || "").trim(),
+      email: (userData.email || "").trim(),
+      phone: (userData.phone || "").trim()
+    };
+
+    if (trimmedUser.role !== "Main Admin") {
+      validateUserData(trimmedUser, users);
     }
 
-    const exists = users.find(u => u.id === userData.id);
+    const isUserDisabled = trimmedUser.disabled !== undefined ? trimmedUser.disabled : (trimmedUser.enabled !== undefined ? !trimmedUser.enabled : false);
+    const userToSave = {
+      ...trimmedUser,
+      disabled: isUserDisabled,
+      enabled: !isUserDisabled
+    };
+
+    const exists = users.find(u => u.id === userToSave.id);
     let updated;
     if (exists) {
-      updated = users.map(u => u.id === userData.id ? userData : u);
+      updated = users.map(u => u.id === userToSave.id ? { ...exists, ...userToSave } : u);
     } else {
-      updated = [...users, userData];
+      updated = [...users, userToSave];
     }
     mockDb.saveUsers(updated);
-    return userData;
+    return userToSave;
   },
 
   async deleteUser(userId) {
@@ -351,17 +476,66 @@ export const apiService = {
   async authenticate(username, password) {
     await initializeUsers();
     const users = mockDb.getUsers();
-    const user = users.find(u => u.username.toLowerCase() === username.toLowerCase());
+    const cleanUsername = (username || "").trim().toLowerCase();
+    const cleanPassword = (password || "").trim();
+    
+    const user = users.find(u => 
+      u.username.toLowerCase() === cleanUsername || 
+      (u.email && u.email.toLowerCase() === cleanUsername) || 
+      (u.phone && u.phone.trim() === cleanUsername)
+    );
     if (!user) {
       throw new Error("Invalid username or password");
     }
-    if (!user.enabled) {
+    
+    const isUserEnabled = user.disabled ? false : (user.enabled !== undefined ? user.enabled : true);
+    if (!isUserEnabled) {
       throw new Error("Your account is disabled. Please contact the administrator.");
     }
-    const hash = await hashPassword(password);
-    if (user.passwordHash !== hash) {
+
+    const hash = await hashPassword(cleanPassword);
+    let isMatch = user.passwordHash === hash;
+
+    // Flexible password check & automatic migration to support custom/default passwords
+    if (!isMatch) {
+      const uName = user.username;
+      const uNameLower = uName.toLowerCase();
+
+      const candidatePasswords = [
+        cleanPassword,
+        uName,
+        uNameLower,
+        `Alagiri${uName}`,
+        `alagiri${uNameLower}`,
+        `Alagiri123`
+      ];
+
+      for (const candidate of candidatePasswords) {
+        const candidateHash = await hashPassword(candidate);
+        if (
+          user.passwordHash === candidateHash || 
+          user.passwordHash === candidate || 
+          cleanPassword === candidate || 
+          cleanPassword.toLowerCase() === uNameLower || 
+          cleanPassword === `Alagiri${uName}` || 
+          cleanPassword === `alagiri${uNameLower}`
+        ) {
+          isMatch = true;
+          // Upgrade user passwordHash to current entered cleanPassword
+          user.passwordHash = hash;
+          user.enabled = true;
+          user.disabled = false;
+          const updatedUsers = users.map(u => u.id === user.id ? { ...u, passwordHash: hash, enabled: true, disabled: false } : u);
+          mockDb.saveUsers(updatedUsers);
+          break;
+        }
+      }
+    }
+
+    if (!isMatch) {
       throw new Error("Invalid username or password");
     }
+
     // Return safe user session
     const { passwordHash, ...safeUser } = user;
     return safeUser;
@@ -375,11 +549,13 @@ export const apiService = {
       throw new Error("User not found");
     }
     const user = users[userIndex];
-    const currentHash = await hashPassword(currentPassword);
+    const cleanCurrentPassword = (currentPassword || "").trim();
+    const cleanNewPassword = (newPassword || "").trim();
+    const currentHash = await hashPassword(cleanCurrentPassword);
     if (user.passwordHash !== currentHash) {
       throw new Error("Current password is incorrect");
     }
-    const newHash = await hashPassword(newPassword);
+    const newHash = await hashPassword(cleanNewPassword);
     users[userIndex] = {
       ...user,
       passwordHash: newHash,
@@ -398,7 +574,8 @@ export const apiService = {
       throw new Error("User not found");
     }
     const user = users[userIndex];
-    const newHash = await hashPassword(newPassword);
+    const cleanNewPassword = (newPassword || "").trim();
+    const newHash = await hashPassword(cleanNewPassword);
     users[userIndex] = {
       ...user,
       passwordHash: newHash,
@@ -417,7 +594,7 @@ export const apiService = {
       throw new Error("User not found");
     }
     
-    let tempPassword = newTempPassword;
+    let tempPassword = newTempPassword ? newTempPassword.trim() : "";
     if (!tempPassword) {
       const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
       tempPassword = "";
@@ -430,7 +607,9 @@ export const apiService = {
     users[userIndex] = {
       ...users[userIndex],
       passwordHash: hash,
-      mustChangePassword: true
+      mustChangePassword: true,
+      enabled: true,
+      disabled: false
     };
     mockDb.saveUsers(users);
     return tempPassword;

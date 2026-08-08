@@ -14,6 +14,7 @@ import {
   NotificationPreferencesView,
   AuditLogsView,
   OrderHistoryView,
+  RejectedOrdersView,
   LoginView,
   ForceChangePasswordView,
   UserManagementView,
@@ -91,8 +92,22 @@ export default function App() {
         const savedUser = localStorage.getItem("pms_current_user");
         if (savedUser) {
           const userObj = JSON.parse(savedUser);
-          setCurrentUser(userObj);
-          setActiveRole(userObj.role);
+          const dbUser = uList.find(u => u.id === userObj.id || u.username.toLowerCase() === userObj.username.toLowerCase());
+          if (dbUser) {
+            const isEnabled = dbUser.disabled ? false : (dbUser.enabled !== undefined ? dbUser.enabled : true);
+            if (!isEnabled) {
+              setCurrentUser(null);
+              localStorage.removeItem("pms_current_user");
+            } else {
+              const { passwordHash, ...safeDbUser } = dbUser;
+              setCurrentUser(safeDbUser);
+              localStorage.setItem("pms_current_user", JSON.stringify(safeDbUser));
+              setActiveRole(safeDbUser.role);
+            }
+          } else {
+            setCurrentUser(userObj);
+            setActiveRole(userObj.role);
+          }
         }
 
         const reqs = await apiService.getRequests();
@@ -102,6 +117,138 @@ export default function App() {
         setRequests(reqs);
         setSuppliers(sups);
         setLogs(auditLogs);
+
+        // Run automatic delay check using expectedDispatchDate (Requirement 7 & 8)
+        let delayModified = false;
+        const now = new Date();
+        const todayStr = now.toISOString().split('T')[0];
+
+        const getRevertStatus = (r) => {
+          if (r.history && r.history.length > 0) {
+            for (let i = r.history.length - 1; i >= 0; i--) {
+              const h = r.history[i];
+              if (h.status && h.status !== "Delayed") {
+                return h.status;
+              }
+            }
+          }
+          return "No Response";
+        };
+
+        const updatedReqs = await Promise.all(reqs.map(async (req) => {
+          // If order has progressed to Booked, Received, or is Rejected, do not auto-delay
+          if (req.status === "Booked" || req.status === "Received" || req.status === "Rejected") {
+            return req;
+          }
+          
+          let expDateStr = req.expectedDispatchDate ? req.expectedDispatchDate.split('T')[0] : null;
+          if (!expDateStr) {
+            const d = new Date(req.date);
+            d.setDate(d.getDate() + 3);
+            expDateStr = d.toISOString().split('T')[0];
+          }
+          
+          const hasPassed = todayStr > expDateStr;
+          
+          if (hasPassed && req.status !== "Delayed") {
+            delayModified = true;
+            const systemLog = {
+              status: "Delayed",
+              updatedBy: "System (Auto)",
+              role: "System",
+              timestamp: now.toISOString(),
+              remarks: `Order automatically marked as Delayed because expected dispatch date (${expDateStr}) has passed.`
+            };
+            const newHistory = [...(req.history || []), systemLog];
+            const updatedReq = {
+              ...req,
+              expectedDispatchDate: expDateStr,
+              status: "Delayed",
+              history: newHistory
+            };
+            
+            await apiService.updateRequest(req.id, updatedReq);
+            return updatedReq;
+          } else if (!hasPassed && req.status === "Delayed") {
+            delayModified = true;
+            const revStatus = getRevertStatus(req);
+            const systemLog = {
+              status: revStatus,
+              updatedBy: "System (Auto)",
+              role: "System",
+              timestamp: now.toISOString(),
+              remarks: `Order status restored to ${revStatus} because revised expected dispatch date (${expDateStr}) is valid.`
+            };
+            const newHistory = [...(req.history || []), systemLog];
+            const updatedReq = {
+              ...req,
+              status: revStatus,
+              history: newHistory
+            };
+            
+            await apiService.updateRequest(req.id, updatedReq);
+            return updatedReq;
+          }
+          return req;
+        }));
+
+        if (delayModified) {
+          setRequests(updatedReqs);
+          
+          reqs.forEach((oldReq, idx) => {
+            const newReq = updatedReqs[idx];
+            if (oldReq.status !== "Delayed" && newReq.status === "Delayed") {
+              const supplierObj = sups.find(s => s.id === newReq.supplierId);
+              const supplierName = supplierObj ? supplierObj.companyName : (newReq.suggestedSupplier || "Supplier Not Assigned");
+              const poNum = newReq.poNumber || newReq.id;
+              const expDate = newReq.expectedDispatchDate ? newReq.expectedDispatchDate.split('T')[0] : "N/A";
+              
+              const title = `⚠️ Delay Alert: ${poNum}`;
+              const body = `PO Number: ${poNum}\nProduct: ${newReq.productName}\nSupplier: ${supplierName}\nExpected Dispatch Date: ${expDate}\nDelay Info: Order has exceeded expected dispatch date without progressing.`;
+              
+              const savedNotifs = JSON.parse(localStorage.getItem("pms_notifications")) || [];
+              // Employee notification
+              const empNotif = {
+                id: `notif-emp-${Date.now()}-${idx}`,
+                title: `⚠️ Order Delayed: ${poNum}`,
+                body: `Your request for "${newReq.productName}" (PO: ${poNum}) is delayed beyond expected dispatch date (${expDate}).`,
+                timestamp: now.toISOString(),
+                read: false,
+                role: "Employee",
+                recipientName: newReq.employeeName
+              };
+              // Supplier / Admin notification
+              const supNotif = {
+                id: `notif-sup-${Date.now()}-${idx}`,
+                title: `⚠️ Supplier Delay Notice: ${poNum}`,
+                body: `Dispatch notice for supplier "${supplierName}": Order PO ${poNum} is overdue. Expected: ${expDate}.`,
+                timestamp: now.toISOString(),
+                read: false,
+                role: "Both"
+              };
+              savedNotifs.unshift(empNotif, supNotif);
+              localStorage.setItem("pms_notifications", JSON.stringify(savedNotifs));
+              
+              const systemLogEvent = {
+                timestamp: now.toISOString(),
+                userName: "System (Auto)",
+                role: "System",
+                action: "Order Marked Delayed",
+                previousValue: oldReq.status,
+                updatedValue: "Delayed",
+                details: `PO: ${poNum} | Product: ${newReq.productName} | Supplier: ${supplierName} | Expected Dispatch: ${expDate} | Auto-flagged as Delayed.`
+              };
+              const savedLogs = JSON.parse(localStorage.getItem("pms_logs")) || CONFIG.initialLogs;
+              savedLogs.unshift(systemLogEvent);
+              localStorage.setItem("pms_logs", JSON.stringify(savedLogs));
+            }
+          });
+          
+          const freshLogs = await apiService.getLogs();
+          setLogs(freshLogs);
+          const freshNotifs = JSON.parse(localStorage.getItem("pms_notifications")) || [];
+          setNotifications(freshNotifs);
+        }
 
         // Load custom branding if configured in local storage
         const savedBranding = localStorage.getItem("pms_branding");
@@ -425,20 +572,14 @@ export default function App() {
       default:
         return <HomeView {...navProps} />;
       case '#create-request':
-        return <CreateRequestView {...navProps} />;
+        return <CreateRequestView {...navProps} cloneId={params.clone} />;
       case '#requested-orders':
-        // Guard: Sub Admin must have approve_requests permission
-        if (currentUser.role === 'Employee' || (currentUser.role === 'Sub Admin' && !currentUser.permissions?.approve_requests)) {
-          window.location.hash = '#home';
-          return null;
-        }
+      case '#pending-orders':
         return <RequestedOrdersView {...navProps} />;
       case '#po-preview':
         return <PoPreviewView {...navProps} requestId={params.id} />;
       case '#live-orders':
         return <LiveOrdersView {...navProps} />;
-      case '#pending-orders':
-        return <PendingOrdersView {...navProps} />;
       case '#order-details':
         return <OrderDetailsView {...navProps} requestId={params.id} />;
       case '#settings':
@@ -451,6 +592,10 @@ export default function App() {
         }
         return <SuppliersView {...navProps} />;
       case '#settings/notifications':
+        if (currentUser.role === 'Employee') {
+          window.location.hash = '#settings';
+          return null;
+        }
         return <NotificationPreferencesView {...navProps} />;
       case '#settings/logs':
         // Guard: Sub Admin must have view_logs permission
@@ -475,6 +620,8 @@ export default function App() {
         return <DepartmentManagementView {...navProps} />;
       case '#order-history':
         return <OrderHistoryView {...navProps} />;
+      case '#rejected-orders':
+        return <RejectedOrdersView {...navProps} />;
     }
   };
 
@@ -587,6 +734,7 @@ export default function App() {
           <datalist id="units-list">
             <option value="pcs" />
             <option value="units" />
+            <option value="Length" />
             <option value="kg" />
             <option value="g" />
             <option value="tons" />

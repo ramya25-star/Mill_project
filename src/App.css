@@ -15,10 +15,11 @@
   --border-color: #e5dec9;
   
   /* Status Colors */
-  --status-red: #f34f4f;
-  --status-orange: #ff8f00;
-  --status-blue: #3b82f6;
-  --status-green: #10b981;
+  --status-red: #FC0000;
+  --status-orange: #F28C28;
+  --status-blue: #2563EB;
+  --status-green: #22C55E;
+  --status-yellow: #F3C82A;
   --status-gray: #9ca3af;
   
   --font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -208,7 +209,7 @@ body {
 .app-content {
   flex: 1;
   overflow-y: auto;
-  padding: 10px 20px 100px 20px; /* space for floating bottom nav */
+  padding: 24px 20px 100px 20px; /* space for floating bottom nav */
   position: relative;
   scrollbar-width: none; /* Hide scrollbar for Firefox */
 }
@@ -725,6 +726,33 @@ body {
   background-color: var(--primary-orange-hover);
 }
 
+.btn-generate-po {
+  padding: 12px 20px;
+  background: #1B1B1F;
+  color: #ffffff;
+  border: none;
+  border-radius: 16px;
+  font-family: var(--font-family);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-generate-po:hover {
+  background-color: #2b2b30;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.btn-generate-po:active {
+  background-color: #121215;
+  transform: scale(0.98);
+}
+
 /* Smart View Section */
 .collapsible-section {
   background-color: var(--card-bg);
@@ -899,12 +927,18 @@ body {
 }
 
 input.form-control, select.form-control {
-  height: 44px;
+  height: 48px;
 }
 
 select.form-control {
-  padding-top: 8px;
-  padding-bottom: 8px;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%232c2a29' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 16px;
+  padding-right: 40px;
 }
 
 .form-control:focus {
@@ -972,10 +1006,11 @@ select.form-control {
 .status-badge.pending { background-color: #eab308; color: #ffffff; }
 .status-badge.approved { background-color: #2563eb; color: #ffffff; }
 .status-badge.rejected { background-color: #6b7280; color: #ffffff; }
-.status-badge.noresponse { background-color: #ef4444; color: #ffffff; }
-.status-badge.acknowledged { background-color: #f97316; color: #ffffff; }
-.status-badge.booked { background-color: #3b82f6; color: #ffffff; }
-.status-badge.received { background-color: #10b981; color: #ffffff; }
+.status-badge.noresponse { background-color: #FC0000; color: #ffffff; }
+.status-badge.acknowledged { background-color: #F28C28; color: #ffffff; }
+.status-badge.booked { background-color: #2563EB; color: #ffffff; }
+.status-badge.received { background-color: #22C55E; color: #ffffff; }
+.status-badge.delayed { background-color: #F3C82A; color: #000000; }
 .status-badge.cancelled { background-color: #6b7280; color: #ffffff; }
 
 /* Requested Order Card (Admin review) */
@@ -1138,7 +1173,7 @@ select.form-control {
   left: 20px;
   right: 20px;
   height: 4px;
-  background-color: var(--border-color);
+  background-color: #D1D5DB; /* Subtle light grey connector */
   z-index: 1;
 }
 
@@ -1147,7 +1182,7 @@ select.form-control {
   top: 15px;
   left: 20px;
   height: 4px;
-  background-color: var(--status-green);
+  background-color: var(--primary-orange);
   z-index: 2;
   transition: width 0.4s ease;
 }
@@ -1166,40 +1201,62 @@ select.form-control {
   height: 32px;
   border-radius: 50%;
   background-color: var(--card-bg);
-  border: 3px solid var(--border-color);
+  border: 3px solid #D1D5DB;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 12px;
   font-weight: 700;
-  color: var(--text-muted);
+  color: #9CA3AF;
   transition: all 0.3s ease;
 }
 
+/* Active Step: Clearly highlighted, stronger contrast, visually prominent */
 .timeline-step.active .timeline-dot {
-  border-color: var(--status-green);
-  background-color: var(--status-green);
-  color: white;
-  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
+  transform: scale(1.18);
+  border-width: 3px;
+  font-weight: 800;
+  box-shadow: 0 0 0 5px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
+/* Completed Steps: Fully visible checkmarks */
 .timeline-step.completed .timeline-dot {
-  border-color: var(--status-green);
-  background-color: var(--status-green);
-  color: white;
+  opacity: 1;
+}
+
+/* Future Steps: Clean, dark, clearly legible text and step numbers */
+.timeline-step.future .timeline-dot {
+  opacity: 1;
+  border-color: #9CA3AF;
+  background-color: #F3F4F6;
+  color: #374151;
+  font-weight: 700;
 }
 
 .timeline-label {
-  margin-top: 8px;
-  font-size: 10px;
+  margin-top: 10px;
+  font-size: 11px;
   font-weight: 700;
-  color: var(--text-muted);
+  color: #374151;
   text-align: center;
+  transition: all 0.2s ease;
 }
 
-.timeline-step.active .timeline-label,
+.timeline-step.active .timeline-label {
+  color: var(--text-main);
+  font-weight: 800;
+  font-size: 12px;
+}
+
 .timeline-step.completed .timeline-label {
   color: var(--text-main);
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+.timeline-step.future .timeline-label {
+  color: #9CA3AF;
+  opacity: 0.5;
 }
 
 /* LR Upload Display area */
@@ -1455,6 +1512,9 @@ input:checked + .slider:before {
 .btn-outlined-icon-edit:hover {
   background-color: rgba(224, 86, 36, 0.08) !important;
 }
+.btn-outlined-icon-dark:hover {
+  background-color: rgba(35, 33, 32, 0.08) !important;
+}
 .btn-outlined-icon-power-red:hover {
   background-color: rgba(239, 68, 68, 0.08) !important;
 }
@@ -1468,11 +1528,12 @@ input:checked + .slider:before {
 /* Smart View Glow Hover & Focus Effects */
 .smart-view-container {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid var(--border-color);
+  border: none;
   background-color: var(--card-bg);
   border-radius: var(--border-radius-md);
-  margin-bottom: 16px;
+  margin-bottom: 28px;
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 .smart-view-container:hover,
@@ -1488,4 +1549,28 @@ input:checked + .slider:before {
   0% { box-shadow: 0 0 8px rgba(230, 126, 53, 0.25), var(--shadow-md); }
   50% { box-shadow: 0 0 18px rgba(230, 126, 53, 0.55), var(--shadow-md); }
   100% { box-shadow: 0 0 8px rgba(230, 126, 53, 0.25), var(--shadow-md); }
+}
+
+/* Shake and pop-in animation for login errors to insist visually on failure */
+@keyframes shakeError {
+  0%, 100% { transform: translateX(0); }
+  15%, 45%, 75% { transform: translateX(-8px); }
+  30%, 60%, 90% { transform: translateX(8px); }
+}
+
+@keyframes popIn {
+  0% { transform: scale(0.95); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.login-error-banner {
+  background: #fef2f2;
+  border: 1.5px solid #fee2e2;
+  color: #ef4444;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  margin-bottom: 16px;
+  text-align: left;
+  animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), shakeError 0.4s ease-in-out;
 }

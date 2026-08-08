@@ -23,12 +23,26 @@ export const Icons = {
   Edit: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 12} height={p?.size || p?.height || 12} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
   Key: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 12} height={p?.size || p?.height || 12} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>,
   Power: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 12} height={p?.size || p?.height || 12} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>,
-  Check: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 12} height={p?.size || p?.height || 12} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" {...p}><polyline points="20 6 9 17 4 12"/></svg>
+  Check: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 12} height={p?.size || p?.height || 12} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" {...p}><polyline points="20 6 9 17 4 12"/></svg>,
+  Camera: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 16} height={p?.size || p?.height || 16} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>,
+  Upload: (p) => <svg viewBox="0 0 24 24" width={p?.size || p?.width || 16} height={p?.size || p?.height || 16} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
 };
 
 // Helper format date
 const formatDate = (isoString) => {
   return new Date(isoString).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+};
+
+const getRevertStatus = (r) => {
+  if (r.history && r.history.length > 0) {
+    for (let i = r.history.length - 1; i >= 0; i--) {
+      const h = r.history[i];
+      if (h.status && h.status !== "Delayed") {
+        return h.status;
+      }
+    }
+  }
+  return "No Response";
 };
 
 // ----------------------------------------------------
@@ -39,9 +53,8 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
   const user = state.currentUser;
   const isEmployee = user.role === "Employee";
 
-  const userRequests = isEmployee 
-    ? state.requests.filter(r => r.employeeName === user.name) 
-    : state.requests;
+  // Filter requests: show system requests, excluding any request soft-deleted by this user
+  const userRequests = state.requests.filter(r => (!r.deletedByUserIds || !r.deletedByUserIds.includes(user.id)));
 
   const isOlderThan14Days = (dateStr) => {
     if (!dateStr) return false;
@@ -56,22 +69,9 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
   const acknowledgedCount = userRequests.filter(r => r.status === "Acknowledged").length;
   const bookedCount = userRequests.filter(r => r.status === "Booked").length;
   const receivedCount = userRequests.filter(r => r.status === "Received" && !isOlderThan14Days(r.actualDeliveryDate)).length;
+  const delayedCount = userRequests.filter(r => r.status === "Delayed").length;
 
-  const totalLiveCount = noResponseCount + acknowledgedCount + bookedCount + receivedCount;
-
-  const hr = new Date().getHours();
-  const greetingMsg = hr < 12 ? "Good Morning" : hr < 17 ? "Good Afternoon" : "Good Evening";
-
-  let welcomeAlert = "";
-  if (user.role === "Employee") {
-    welcomeAlert = totalLiveCount > 0
-      ? `You have ${totalLiveCount} active orders in progress.`
-      : "No active orders. Create a request to get started.";
-  } else {
-    welcomeAlert = pendingCount > 0
-      ? `You have ${pendingCount} pending approvals awaiting review.`
-      : "All procurement requests have been processed.";
-  }
+  const totalLiveCount = noResponseCount + acknowledgedCount + bookedCount + receivedCount + delayedCount;
 
   const openNotifications = () => {
     const list = state.notifications.filter(n => n.role === "Both" || n.role === user.role);
@@ -109,7 +109,8 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
 
   return (
     <div>
-      <header className="app-header" style={{ marginBottom: '24px' }}>
+      {/* Dashboard Header */}
+      <header className="app-header" style={{ marginBottom: '32px' }}>
         <div className="header-left">
           <h1 style={{ fontSize: '32px', fontWeight: '800', color: 'var(--text-main)' }}>Dashboard</h1>
         </div>
@@ -127,7 +128,7 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
       {/* 1. Requested Orders Card */}
       <div 
         className="stat-card" 
-        onClick={() => navigateTo(isEmployee ? '#pending-orders' : '#requested-orders')} 
+        onClick={() => navigateTo('#requested-orders')} 
         style={{ 
           display: 'flex', 
           justifyContent: 'space-between', 
@@ -135,9 +136,9 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
           cursor: 'pointer', 
           padding: '24px', 
           background: '#ffffff', 
-          border: '1px solid var(--border-color)', 
+          border: 'none', 
           borderRadius: '16px', 
-          marginBottom: '16px', 
+          marginBottom: '28px', 
           width: '100%', 
           boxSizing: 'border-box',
           boxShadow: 'var(--shadow-sm)'
@@ -162,19 +163,21 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
           cursor: 'pointer', 
           padding: '24px', 
           background: '#ffffff', 
-          border: '1px solid var(--border-color)', 
+          border: 'none', 
           borderRadius: '16px', 
-          marginBottom: '16px', 
+          marginBottom: '28px', 
           width: '100%', 
           boxSizing: 'border-box',
           boxShadow: 'var(--shadow-sm)'
         }}
       >
         <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--text-main)' }}>Live Orders</div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#ef4444', color: '#ffffff', minWidth: '36px', height: '36px', borderRadius: '6px', fontSize: '15px', fontWeight: '800', padding: '0 8px', boxSizing: 'border-box' }}>{noResponseCount}</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#f97316', color: '#ffffff', minWidth: '36px', height: '36px', borderRadius: '6px', fontSize: '15px', fontWeight: '800', padding: '0 8px', boxSizing: 'border-box' }}>{acknowledgedCount}</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#2563eb', color: '#ffffff', minWidth: '36px', height: '36px', borderRadius: '6px', fontSize: '15px', fontWeight: '800', padding: '0 8px', boxSizing: 'border-box' }}>{bookedCount}</span>
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#FC0000', color: '#ffffff', minWidth: '32px', height: '32px', borderRadius: '6px', fontSize: '13px', fontWeight: '800', padding: '0 6px', boxSizing: 'border-box' }} title="No Response">{noResponseCount}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#F28C28', color: '#ffffff', minWidth: '32px', height: '32px', borderRadius: '6px', fontSize: '13px', fontWeight: '800', padding: '0 6px', boxSizing: 'border-box' }} title="Acknowledged">{acknowledgedCount}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#2563EB', color: '#ffffff', minWidth: '32px', height: '32px', borderRadius: '6px', fontSize: '13px', fontWeight: '800', padding: '0 6px', boxSizing: 'border-box' }} title="Booked">{bookedCount}</span>
+          {receivedCount > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#22C55E', color: '#ffffff', minWidth: '32px', height: '32px', borderRadius: '6px', fontSize: '13px', fontWeight: '800', padding: '0 6px', boxSizing: 'border-box' }} title="Received">{receivedCount}</span>}
+          {delayedCount > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#F3C82A', color: '#000000', minWidth: '32px', height: '32px', borderRadius: '6px', fontSize: '13px', fontWeight: '800', padding: '0 6px', boxSizing: 'border-box' }} title="Delayed">{delayedCount}</span>}
         </div>
       </div>
 
@@ -186,7 +189,7 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
           width: '100%', 
           height: '56px', 
           borderRadius: '16px', 
-          backgroundColor: '#2a2726', 
+          backgroundColor: '#232120', 
           color: '#ffffff', 
           fontSize: '18px', 
           fontWeight: '700', 
@@ -195,30 +198,23 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'center', 
-          marginBottom: '24px', 
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' 
+          margin: '56px 0', 
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+          transition: 'all 0.2s'
         }}
       >
         Create Request
       </button>
 
       {/* 4. Smart View Card */}
-      <div 
-        className={`smart-view-container ${smartOpen ? 'expanded' : ''}`} 
-        style={{ 
-          marginBottom: '16px', 
-          borderRadius: '16px', 
-          border: '1.5px solid #ffd8a8', 
-          overflow: 'hidden' 
-        }}
-      >
+      <div className={`smart-view-container ${smartOpen ? 'expanded' : ''}`}>
         <div 
           onClick={() => setSmartOpen(!smartOpen)} 
           style={{ 
             display: 'flex', 
             justifyContent: 'space-between', 
             alignItems: 'center', 
-            padding: '16px 20px', 
+            padding: '18px 24px', 
             cursor: 'pointer',
             background: '#ffffff'
           }}
@@ -253,7 +249,7 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
         
         <div 
           style={{ 
-            maxHeight: smartOpen ? '320px' : '0px', 
+            maxHeight: smartOpen ? '360px' : '0px', 
             overflow: 'hidden', 
             transition: 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
             background: '#ffffff',
@@ -262,30 +258,39 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
         >
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <div 
-              onClick={() => navigateTo('#live-orders?filter=acknowledged')}
-              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', cursor: 'pointer', borderBottom: '1.5px solid #f6f5f4' }}
-            >
-              <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-main)' }}>Acknowledged</span>
-              <span style={{ background: '#f5efe9', color: '#2a2726', fontWeight: '800', fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%' }}>
-                {acknowledgedCount}
-              </span>
-            </div>
-
-            <div 
               onClick={() => navigateTo('#live-orders?filter=noresponse')}
-              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', cursor: 'pointer', borderBottom: '1.5px solid #f6f5f4' }}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 24px', cursor: 'pointer', borderBottom: '1.5px solid #f6f5f4' }}
             >
-              <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-main)' }}>Not Acknowledged</span>
+              <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#FC0000' }}></span>
+                No Response
+              </span>
               <span style={{ background: '#f5efe9', color: '#2a2726', fontWeight: '800', fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%' }}>
                 {noResponseCount}
               </span>
             </div>
 
             <div 
-              onClick={() => navigateTo('#live-orders?filter=booked')}
-              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', cursor: 'pointer', borderBottom: '1.5px solid #f6f5f4' }}
+              onClick={() => navigateTo('#live-orders?filter=acknowledged')}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 24px', cursor: 'pointer', borderBottom: '1.5px solid #f6f5f4' }}
             >
-              <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-main)' }}>Booked</span>
+              <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#F28C28' }}></span>
+                Acknowledged
+              </span>
+              <span style={{ background: '#f5efe9', color: '#2a2726', fontWeight: '800', fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%' }}>
+                {acknowledgedCount}
+              </span>
+            </div>
+
+            <div 
+              onClick={() => navigateTo('#live-orders?filter=booked')}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 24px', cursor: 'pointer', borderBottom: '1.5px solid #f6f5f4' }}
+            >
+              <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#2563EB' }}></span>
+                Booked
+              </span>
               <span style={{ background: '#f5efe9', color: '#2a2726', fontWeight: '800', fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%' }}>
                 {bookedCount}
               </span>
@@ -293,11 +298,27 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
 
             <div 
               onClick={() => navigateTo('#live-orders?filter=received')}
-              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', cursor: 'pointer' }}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 24px', cursor: 'pointer', borderBottom: '1.5px solid #f6f5f4' }}
             >
-              <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-main)' }}>Recieved</span>
+              <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#22C55E' }}></span>
+                Received
+              </span>
               <span style={{ background: '#f5efe9', color: '#2a2726', fontWeight: '800', fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%' }}>
                 {receivedCount}
+              </span>
+            </div>
+
+            <div 
+              onClick={() => navigateTo('#live-orders?filter=delayed')}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 24px', cursor: 'pointer' }}
+            >
+              <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#F3C82A' }}></span>
+                Delayed
+              </span>
+              <span style={{ background: '#f5efe9', color: '#2a2726', fontWeight: '800', fontSize: '13px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%' }}>
+                {delayedCount}
               </span>
             </div>
           </div>
@@ -310,19 +331,43 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
         onClick={() => navigateTo('#order-history')} 
         style={{ 
           cursor: 'pointer', 
-          marginTop: '16px',
           display: 'flex', 
           justifyContent: 'space-between', 
           alignItems: 'center', 
           padding: '20px 24px', 
           background: '#ffffff', 
-          border: '1px solid var(--border-color)', 
+          border: 'none', 
           borderRadius: '16px', 
           width: '100%', 
-          boxSizing: 'border-box'
+          boxSizing: 'border-box',
+          boxShadow: 'var(--shadow-sm)',
+          marginBottom: '28px'
         }}
       >
         <span style={{ fontSize: '20px', fontWeight: '800', color: 'var(--text-main)' }}>Order history</span>
+        <Icons.ChevronRight />
+      </div>
+
+      {/* 6. Rejected Orders Card */}
+      <div 
+        className="menu-card" 
+        onClick={() => navigateTo('#rejected-orders')} 
+        style={{ 
+          cursor: 'pointer', 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          padding: '20px 24px', 
+          background: '#ffffff', 
+          border: 'none', 
+          borderRadius: '16px', 
+          width: '100%', 
+          boxSizing: 'border-box',
+          boxShadow: 'var(--shadow-sm)',
+          marginBottom: '28px'
+        }}
+      >
+        <span style={{ fontSize: '20px', fontWeight: '800', color: 'var(--text-main)' }}>Rejected orders</span>
         <Icons.ChevronRight />
       </div>
     </div>
@@ -332,7 +377,7 @@ export function HomeView({ state, navigateTo, openModal, closeModal, setModalCon
 // ----------------------------------------------------
 // 2. CREATE REQUEST VIEW COMPONENT
 // ----------------------------------------------------
-export function CreateRequestView({ state, navigateTo, addNotification, openModal, closeModal, setModalContent }) {
+export function CreateRequestView({ state, navigateTo, addNotification, openModal, closeModal, setModalContent, cloneId }) {
   const [productName, setProductName] = useState("");
   const [qty, setQty] = useState("");
   const [units, setUnits] = useState("Pieces");
@@ -344,6 +389,34 @@ export function CreateRequestView({ state, navigateTo, addNotification, openModa
   const [description, setDescription] = useState("");
   const [listening, setListening] = useState(false);
   const [errors, setErrors] = useState({});
+
+  // New Date, Priority and Document attachments states
+  const [dueDate, setDueDate] = useState("");
+  const [priority, setPriority] = useState("Normal");
+  const [attachedFile, setAttachedFile] = useState(null);
+  const [attachedFileName, setAttachedFileName] = useState("");
+
+  // Clone details initialization
+  useEffect(() => {
+    if (cloneId && state.requests) {
+      const clonedReq = state.requests.find(r => r.id === cloneId);
+      if (clonedReq) {
+        setProductName(clonedReq.productName || "");
+        setQty(clonedReq.qty ? String(clonedReq.qty) : "");
+        setUnits(clonedReq.units || "Pieces");
+        setSuggestedSupplier(clonedReq.suggestedSupplier || "");
+        setSuggestedSupplierPhone(clonedReq.suggestedSupplierPhone || "");
+        setSuggestedSupplierEmail(clonedReq.suggestedSupplierEmail || "");
+        setSuggestedSupplierRemarks(clonedReq.suggestedSupplierRemarks || "");
+        setBillTo(clonedReq.billTo || (state.branding.billingLocations[0] || ""));
+        setDescription(clonedReq.description || "");
+        setDueDate(clonedReq.dueDate || "");
+        setPriority(clonedReq.priority || "Normal");
+        setAttachedFile(clonedReq.image || null);
+        setAttachedFileName(clonedReq.imageName || "");
+      }
+    }
+  }, [cloneId, state.requests]);
 
   const validateField = (field, value) => {
     let err = "";
@@ -390,11 +463,6 @@ export function CreateRequestView({ state, navigateTo, addNotification, openModa
     });
   };
 
-  // New Date, Priority and Document attachments states
-  const [dueDate, setDueDate] = useState("");
-  const [priority, setPriority] = useState("Normal");
-  const [attachedFile, setAttachedFile] = useState(null);
-  const [attachedFileName, setAttachedFileName] = useState("");
 
   // Live Webcam state variables
   const [showWebcamModal, setShowWebcamModal] = useState(false);
@@ -604,6 +672,84 @@ export function CreateRequestView({ state, navigateTo, addNotification, openModa
       return;
     }
 
+    if (cloneId) {
+      const original = state.requests.find(r => r.id === cloneId);
+      if (original) {
+        const fields = [
+          { name: "Product Name", prev: original.productName, current: productName, key: "productName" },
+          { name: "Quantity", prev: original.qty, current: quantity, key: "qty" },
+          { name: "Units", prev: original.units, current: units, key: "units" },
+          { name: "Priority", prev: original.priority, current: priority, key: "priority" },
+          { name: "Bill To", prev: original.billTo, current: billTo, key: "billTo" },
+          { name: "Due Date", prev: original.dueDate, current: dueDate, key: "dueDate" },
+          { name: "Suggested Supplier", prev: original.suggestedSupplier, current: suggestedSupplier, key: "suggestedSupplier" },
+          { name: "Description", prev: original.description, current: description, key: "description" },
+          { name: "Supplier Phone", prev: original.suggestedSupplierPhone, current: suggestedSupplierPhone, key: "suggestedSupplierPhone" },
+          { name: "Supplier Email", prev: original.suggestedSupplierEmail, current: suggestedSupplierEmail, key: "suggestedSupplierEmail" },
+          { name: "Supplier Remarks", prev: original.suggestedSupplierRemarks, current: suggestedSupplierRemarks, key: "suggestedSupplierRemarks" },
+          { name: "Attachment File", prev: original.imageName, current: attachedFileName, key: "imageName" }
+        ];
+
+        const now = new Date();
+        const editHistoryEntries = [];
+        
+        fields.forEach(f => {
+          const prevVal = f.prev !== undefined && f.prev !== null ? String(f.prev).trim() : "";
+          const currVal = f.current !== undefined && f.current !== null ? String(f.current).trim() : "";
+          
+          if (prevVal !== currVal) {
+            editHistoryEntries.push({
+              status: original.status,
+              updatedBy: user.name,
+              role: user.role,
+              timestamp: now.toISOString(),
+              remarks: `Field [${f.name}] modified from "${f.prev || 'None'}" to "${f.current || 'None'}".`
+            });
+            
+            state.logEvent(
+              "Edit Request Field", 
+              String(f.prev || 'None'), 
+              String(f.current || 'None'), 
+              `User changed request ${original.id} [${f.name}]: ${f.prev || 'None'} -> ${f.current || 'None'}`
+            );
+          }
+        });
+
+        const updatedReq = {
+          ...original,
+          productName,
+          qty: quantity,
+          units,
+          priority: priority || "Normal",
+          billTo,
+          dueDate: dueDate || original.dueDate,
+          suggestedSupplier: suggestedSupplier || "",
+          description,
+          suggestedSupplierPhone: isEmployee ? suggestedSupplierPhone : original.suggestedSupplierPhone,
+          suggestedSupplierEmail: isEmployee ? suggestedSupplierEmail : original.suggestedSupplierEmail,
+          suggestedSupplierRemarks: isEmployee ? suggestedSupplierRemarks : original.suggestedSupplierRemarks,
+          image: attachedFile || original.image,
+          imageName: attachedFileName || original.imageName,
+          history: [...(original.history || []), ...editHistoryEntries]
+        };
+
+        const saved = await apiService.updateRequest(cloneId, updatedReq);
+        state.setRequests(state.requests.map(r => r.id === cloneId ? saved : r));
+        
+        state.showToast("Success", `Request ${cloneId} revised and updated successfully.`, "success");
+        
+        addNotification(
+          "Request Revised",
+          `Employee: ${user.name}\nRequest ID: ${cloneId}\nUpdated fields: ${editHistoryEntries.map(e => e.remarks.split(']')[0].replace('Field [', '')).join(', ')}`,
+          "Admin"
+        );
+
+        state.triggerWebhook("request.updated", saved);
+        navigateTo('#live-orders');
+        return;
+      }
+    }
+
     const reqId = `REQ-${1000 + state.requests.length + 1}`;
 
     const newReq = {
@@ -707,7 +853,7 @@ export function CreateRequestView({ state, navigateTo, addNotification, openModa
           <button className="back-btn" onClick={() => navigateTo('#home')} style={{ cursor: 'pointer' }}>
             <Icons.Back />
           </button>
-          <h1 style={{ fontSize: '20px' }}>Create Request</h1>
+          <h1 style={{ fontSize: '20px' }}>{cloneId ? "Revise Request" : "Create Request"}</h1>
         </div>
       </header>
 
@@ -734,6 +880,7 @@ export function CreateRequestView({ state, navigateTo, addNotification, openModa
               <option value="Meter">Meter</option>
               <option value="Nos">Nos</option>
               <option value="Feet">Feet</option>
+              <option value="Length">Length</option>
             </select>
             {errors.units && <div style={{ color: 'var(--status-red)', fontSize: '11px', marginTop: '4px', textAlign: 'left' }}>{errors.units}</div>}
           </div>
@@ -823,24 +970,82 @@ export function CreateRequestView({ state, navigateTo, addNotification, openModa
           </div>
         </div>
 
-        <div className="form-group" style={{ marginTop: '16px', textAlign: 'left' }}>
-          <label>Attachment Document</label>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <div className="form-group" style={{ marginTop: '20px', textAlign: 'left' }}>
+          <label style={{ fontSize: '13px', fontWeight: '800', marginBottom: '8px', display: 'block', color: 'var(--text-main)' }}>Attachment Document</label>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             <button 
               type="button"
-              className="btn-outlined-icon-edit" 
               onClick={startWebcam}
-              style={{ backgroundColor: 'transparent', color: 'var(--primary-orange)', border: '1px solid var(--primary-orange)', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', height: '36px', boxSizing: 'border-box' }}
+              style={{ 
+                flex: 1,
+                backgroundColor: '#ffffff', 
+                color: 'var(--primary-orange)', 
+                border: '2px solid var(--primary-orange)', 
+                borderRadius: '12px', 
+                padding: '10px 16px', 
+                fontSize: '13px', 
+                fontWeight: '800', 
+                cursor: 'pointer', 
+                display: 'inline-flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                gap: '8px', 
+                height: '42px', 
+                boxSizing: 'border-box',
+                boxShadow: 'var(--shadow-sm)',
+                transition: 'all 0.2s ease-in-out'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(230, 126, 53, 0.04)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#ffffff';
+                e.currentTarget.style.transform = 'none';
+              }}
+              onMouseDown={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
             >
-              📸 Scan Document
+              <Icons.Camera size={16} />
+              <span>Scan Document</span>
             </button>
             <input id="camera-fallback-input" type="file" accept="image/*" capture="environment" onChange={handleCameraCapture} style={{ display: 'none' }} />
             
             <label 
-              className="btn-outlined-icon-key" 
-              style={{ backgroundColor: 'transparent', color: 'var(--text-main)', border: '1px solid var(--text-main)', borderRadius: '6px', padding: '8px 12px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', height: '36px', boxSizing: 'border-box' }}
+              style={{ 
+                flex: 1,
+                backgroundColor: '#1b1b1f', 
+                color: '#ffffff', 
+                border: 'none', 
+                borderRadius: '12px', 
+                padding: '10px 16px', 
+                fontSize: '13px', 
+                fontWeight: '800', 
+                cursor: 'pointer', 
+                display: 'inline-flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                gap: '8px', 
+                height: '42px', 
+                boxSizing: 'border-box',
+                boxShadow: 'var(--shadow-sm)',
+                transition: 'all 0.2s ease-in-out'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#2c2c30';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#1b1b1f';
+                e.currentTarget.style.transform = 'none';
+              }}
+              onMouseDown={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
             >
-              📁 Upload Document
+              <Icons.Upload size={16} />
+              <span>Upload Document</span>
               <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/*" onChange={handleImageFileSelect} style={{ display: 'none' }} />
             </label>
           </div>
@@ -861,7 +1066,7 @@ export function CreateRequestView({ state, navigateTo, addNotification, openModa
         </div>
 
         <button className="btn-dark" onClick={handleSubmit} style={{ marginTop: '10px', cursor: 'pointer' }}>
-          Place Request
+          {cloneId ? "Save & Resend" : "Place Request"}
         </button>
       </div>
 
@@ -921,14 +1126,32 @@ export function CreateRequestView({ state, navigateTo, addNotification, openModa
 export function SupplierPicker({ suppliers, currentSupplierId, onSelect, productName }) {
   const [query, setQuery] = useState("");
 
-  const getSortedSuppliers = () => {
-    const queryTerm = (productName || "").toLowerCase().trim();
-    return [...suppliers].sort((a, b) => {
-      const aProducts = (a.products || "").toLowerCase();
-      const bProducts = (b.products || "").toLowerCase();
+  const isSupplierMatchingProduct = (supplierProducts, requestedProduct) => {
+    if (!supplierProducts || !requestedProduct) return false;
+    const supProds = supplierProducts.toLowerCase();
+    const reqProd = requestedProduct.toLowerCase();
+    
+    if (supProds.includes(reqProd)) return true;
+    
+    const cleanedReq = reqProd
+      .replace(/\d+/g, '')
+      .replace(/\b(pcs|pc|kg|g|litre|litres|box|boxes|meter|meters|nos|feet|foot|drums|units|unit|length)\b/gi, '')
+      .trim();
       
-      const aMatches = queryTerm && (aProducts.includes(queryTerm) || queryTerm.split(' ').some(w => w.length > 2 && aProducts.includes(w)));
-      const bMatches = queryTerm && (bProducts.includes(queryTerm) || queryTerm.split(' ').some(w => w.length > 2 && bProducts.includes(w)));
+    if (!cleanedReq) return false;
+    if (supProds.includes(cleanedReq)) return true;
+    
+    const words = cleanedReq.split(/[\s,.\-_/]+/).filter(w => w.length > 2);
+    if (words.length === 0) return false;
+    
+    return words.some(word => supProds.includes(word));
+  };
+
+  const getSortedSuppliers = () => {
+    const reqProd = productName || "";
+    return [...suppliers].sort((a, b) => {
+      const aMatches = isSupplierMatchingProduct(a.products, reqProd);
+      const bMatches = isSupplierMatchingProduct(b.products, reqProd);
       
       if (aMatches && !bMatches) return -1;
       if (!aMatches && bMatches) return 1;
@@ -985,10 +1208,7 @@ export function SupplierPicker({ suppliers, currentSupplierId, onSelect, product
           </div>
         ) : (
           filtered.map(sup => {
-            const isNewest = newestSupplier && newestSupplier.id === sup.id;
-            const queryTerm = (productName || "").toLowerCase().trim();
-            const aProducts = (sup.products || "").toLowerCase();
-            const isRecommended = queryTerm && (aProducts.includes(queryTerm) || queryTerm.split(' ').some(w => w.length > 2 && aProducts.includes(w)));
+            const isRecommended = isSupplierMatchingProduct(sup.products, productName);
             return (
               <div 
                 key={sup.id} 
@@ -1039,27 +1259,49 @@ export function SupplierPicker({ suppliers, currentSupplierId, onSelect, product
 // 3. REQUESTED ORDERS VIEW (ADMIN APPROVALS)
 // ----------------------------------------------------
 export function RequestedOrdersView({ state, navigateTo, addNotification, openModal, closeModal, setModalContent }) {
-  const pendingRequests = state.requests.filter(r => r.status === "Pending");
+  const user = state.currentUser;
+  const pendingRequests = state.requests.filter(r => r.status === "Pending" && (!r.deletedByUserIds || !r.deletedByUserIds.includes(user.id)));
   
-  // Custom local state for review card fields
+  // URL Hash parameter tracking for selected order navigation (Requirement 8)
+  const getSelectedIdFromHash = () => {
+    const parts = window.location.hash.split('?');
+    if (parts[1]) {
+      const params = new URLSearchParams(parts[1]);
+      return params.get('id') || null;
+    }
+    return null;
+  };
+
+  const [selectedRequestId, setSelectedRequestId] = useState(getSelectedIdFromHash());
   const [formData, setFormData] = useState({});
   const [ignoredSuggestions, setIgnoredSuggestions] = useState({});
 
   useEffect(() => {
-    const data = {};
-    pendingRequests.forEach(req => {
-      const matchSupplier = state.suppliers.find(s => 
-        s.companyName.toLowerCase() === req.suggestedSupplier.toLowerCase() || 
-        s.products.toLowerCase().includes(req.productName.split(' ')[0].toLowerCase())
-      );
-      data[req.id] = {
-        productName: req.productName,
-        qty: req.qty,
-        units: req.units,
-        description: req.description,
-        billTo: req.billTo,
-        supplierId: matchSupplier ? matchSupplier.id : ""
-      };
+    const handleHashChange = () => {
+      setSelectedRequestId(getSelectedIdFromHash());
+    };
+    setSelectedRequestId(getSelectedIdFromHash());
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  useEffect(() => {
+    const data = { ...formData };
+    state.requests.forEach(req => {
+      if (!data[req.id]) {
+        const matchSupplier = state.suppliers.find(s => 
+          (s.companyName && req.suggestedSupplier && s.companyName.toLowerCase() === req.suggestedSupplier.toLowerCase()) || 
+          (s.products && req.productName && s.products.toLowerCase().includes((req.productName || '').split(' ')[0].toLowerCase()))
+        );
+        data[req.id] = {
+          productName: req.productName || "",
+          qty: req.qty || 1,
+          units: req.units || "pcs",
+          description: req.description || "",
+          billTo: req.billTo || (state.branding.billingLocations ? state.branding.billingLocations[0] : ""),
+          supplierId: matchSupplier ? matchSupplier.id : (req.supplierId || "")
+        };
+      }
     });
     setFormData(data);
   }, [state.requests, state.suppliers]);
@@ -1072,6 +1314,26 @@ export function RequestedOrdersView({ state, navigateTo, addNotification, openMo
         [field]: value
       }
     }));
+  };
+
+  const openSupplierPicker = (requestId) => {
+    const handleSelect = (supId) => {
+      updateCardField(requestId, "supplierId", supId);
+      // Requirement 10: Automatically hide suggested supplier recommendation card once user selects a supplier
+      setIgnoredSuggestions(prev => ({ ...prev, [requestId]: true }));
+      closeModal();
+    };
+
+    setModalContent(
+      <SupplierPicker 
+        suppliers={state.suppliers} 
+        currentSupplierId={formData[requestId]?.supplierId} 
+        onSelect={handleSelect} 
+        productName={formData[requestId]?.productName}
+      />,
+      "Select Supplier"
+    );
+    openModal();
   };
 
   const handleApprovalBillToChange = (reqId, val) => {
@@ -1130,13 +1392,52 @@ export function RequestedOrdersView({ state, navigateTo, addNotification, openMo
       }
 
       const user = state.currentUser;
-      const updatedHistory = [...req.history, {
-        status: "No Response",
-        updatedBy: user.name,
-        role: user.role,
-        timestamp: new Date().toISOString(),
-        remarks: "Approved and PO generated (Order Placed)."
-      }];
+      
+      const fields = [
+        { name: "Product Name", prev: req.productName, current: cardData.productName, key: "productName" },
+        { name: "Quantity", prev: req.qty, current: parseFloat(cardData.qty), key: "qty" },
+        { name: "Units", prev: req.units, current: cardData.units, key: "units" },
+        { name: "Description", prev: req.description, current: cardData.description, key: "description" },
+        { name: "Bill To", prev: req.billTo, current: cardData.billTo, key: "billTo" },
+        { name: "Supplier ID", prev: req.supplierId, current: cardData.supplierId, key: "supplierId" }
+      ];
+
+      const editHistoryEntries = [];
+      const now = new Date();
+      
+      fields.forEach(f => {
+        const prevVal = f.prev !== undefined && f.prev !== null ? String(f.prev).trim() : "";
+        const currVal = f.current !== undefined && f.current !== null ? String(f.current).trim() : "";
+        
+        if (prevVal !== currVal) {
+          editHistoryEntries.push({
+            status: "No Response",
+            updatedBy: user.name,
+            role: user.role,
+            timestamp: now.toISOString(),
+            remarks: `Field [${f.name}] modified from "${f.prev || 'None'}" to "${f.current || 'None'}".`
+          });
+          
+          state.logEvent(
+            "Edit Request Field", 
+            String(f.prev || 'None'), 
+            String(f.current || 'None'), 
+            `User changed request ${req.id} [${f.name}]: ${f.prev || 'None'} -> ${f.current || 'None'}`
+          );
+        }
+      });
+
+      const updatedHistory = [
+        ...req.history,
+        ...editHistoryEntries,
+        {
+          status: "No Response",
+          updatedBy: user.name,
+          role: user.role,
+          timestamp: now.toISOString(),
+          remarks: "Approved and PO generated (Order Placed)."
+        }
+      ];
 
       const updatedReq = {
         ...req,
@@ -1226,32 +1527,29 @@ export function RequestedOrdersView({ state, navigateTo, addNotification, openMo
     openModal();
   };
 
-  const openSupplierPicker = (requestId) => {
-    const handleSelect = (supId) => {
-      updateCardField(requestId, "supplierId", supId);
-      closeModal();
-    };
-
-    setModalContent(
-      <SupplierPicker 
-        suppliers={state.suppliers} 
-        currentSupplierId={formData[requestId]?.supplierId} 
-        onSelect={handleSelect} 
-        productName={formData[requestId]?.productName}
-      />,
-      "Select Supplier"
-    );
-    openModal();
-  };
+  const selectedReq = selectedRequestId ? state.requests.find(r => r.id === selectedRequestId) : null;
 
   return (
     <div>
       <header className="app-header">
         <div className="header-left">
-          <button className="back-btn" onClick={() => navigateTo('#home')} style={{ cursor: 'pointer' }}>
+          <button 
+            className="back-btn" 
+            onClick={() => {
+              if (selectedRequestId) {
+                window.location.hash = '#requested-orders';
+                setSelectedRequestId(null);
+              } else {
+                navigateTo('#home');
+              }
+            }} 
+            style={{ cursor: 'pointer' }}
+          >
             <Icons.Back />
           </button>
-          <h1 style={{ fontSize: '20px' }}>Requested orders</h1>
+          <h1 style={{ fontSize: '20px' }}>
+            {selectedReq ? 'Request details' : 'Requested orders'}
+          </h1>
         </div>
         <div className="header-right">
           <div style={{ background: '#e5dec9', fontSize: '12px', fontWeight: '800', padding: '4px 8px', borderRadius: '4px', color: 'var(--text-main)' }}>
@@ -1261,19 +1559,115 @@ export function RequestedOrdersView({ state, navigateTo, addNotification, openMo
       </header>
 
       <div style={{ paddingTop: '10px' }}>
-        {pendingRequests.length === 0 ? (
-          <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+        {selectedRequestId && !selectedReq ? (
+          <div style={{ padding: '40px 20px', textAlign: 'center', background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '16px', boxShadow: 'var(--shadow-sm)' }}>
             <Icons.Warning />
-            <p style={{ fontWeight: 600, marginTop: '8px' }}>No pending approvals.</p>
+            <p style={{ fontWeight: 800, margin: '14px 0 6px 0', fontSize: '16px', color: 'var(--text-main)' }}>Request "{selectedRequestId}" Not Found</p>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '18px' }}>The requested order could not be found or has been processed.</p>
+            <button className="btn-orange" onClick={() => { window.location.hash = '#requested-orders'; setSelectedRequestId(null); }} style={{ width: 'auto', padding: '10px 20px', fontSize: '12px', cursor: 'pointer' }}>
+              Back to Requested Orders
+            </button>
           </div>
-        ) : (
-          pendingRequests.map((req, idx) => {
-            const current = formData[req.id] || { productName: "", qty: "", units: "", description: "", billTo: "", supplierId: "" };
-            return (
-              <div key={req.id} className="requested-order-card">
-                <div className="card-index">{idx + 1}</div>
+        ) : !selectedReq ? (
+          pendingRequests.length === 0 ? (
+            <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+              <Icons.Warning />
+              <p style={{ fontWeight: 600, marginTop: '8px' }}>No pending requested orders.</p>
+            </div>
+          ) : (
+            pendingRequests.map((req, idx) => (
+              <div 
+                key={req.id} 
+                className="requested-order-overview-card"
+                onClick={() => {
+                  window.location.hash = `#requested-orders?id=${req.id}`;
+                  setSelectedRequestId(req.id);
+                }}
+                style={{ 
+                  background: 'var(--card-bg)', 
+                  border: '1px solid var(--border-color)', 
+                  borderRadius: '16px', 
+                  padding: '16px', 
+                  marginBottom: '14px', 
+                  cursor: 'pointer',
+                  boxShadow: 'var(--shadow-sm)',
+                  textAlign: 'left',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: '800', color: 'var(--primary-orange)' }}>
+                    {req.id}
+                  </div>
+                </div>
                 
-                <div className="form-group" style={{ marginTop: '10px' }}>
+                <div style={{ fontSize: '16px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '6px' }}>
+                  {req.productName} <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-muted)' }}>({req.qty} {req.units})</span>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: 'var(--text-muted)', paddingTop: '6px', borderTop: '1px dashed var(--border-color)' }}>
+                  <div>Requested by: <b style={{ color: 'var(--text-main)' }}>{req.employeeName || "Employee"}</b></div>
+                  <div>Date: <b style={{ color: 'var(--text-main)' }}>{new Date(req.date).toLocaleDateString('en-GB')}</b></div>
+                </div>
+              </div>
+            ))
+          )
+        ) : (
+          /* Requirement 8 & 9: Request Details / Review Page for Selected Order */
+          (() => {
+            const req = selectedReq;
+            const current = formData[req.id] || { productName: req.productName, qty: req.qty, units: req.units, description: req.description, billTo: req.billTo, supplierId: "" };
+            const isEmployee = state.currentUser.role === 'Employee';
+
+            if (isEmployee) {
+              const assignedSup = state.suppliers.find(s => s.id === req.supplierId || s.id === current.supplierId);
+              return (
+                <div key={req.id} className="requested-order-card" style={{ textAlign: 'left' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                    <div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--primary-orange)' }}>
+                      Request ID: {req.id}
+                    </div>
+                    <span className={`status-badge ${req.status.toLowerCase().replace(/\s+/g, '-')}`} style={{ textTransform: 'uppercase', fontSize: '10px' }}>
+                      {req.status}
+                    </span>
+                  </div>
+
+                  <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', marginBottom: '14px' }}>
+                    <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '8px' }}>
+                      {req.productName} <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-muted)' }}>({req.qty} {req.units})</span>
+                    </div>
+                    <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                      <b>Description:</b> {req.description || "No description provided."}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-main)', borderTop: '1px dashed var(--border-color)', paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div><b>Delivery Location:</b> {req.billTo || "Standard Warehouse"}</div>
+                      <div><b>Requested By:</b> {req.employeeName || "Employee"}</div>
+                      <div><b>Request Date:</b> {new Date(req.date).toLocaleDateString('en-GB')}</div>
+                      {assignedSup && <div><b>Assigned Supplier:</b> {assignedSup.companyName}</div>}
+                      {!assignedSup && req.suggestedSupplier && <div><b>Suggested Supplier:</b> {req.suggestedSupplier}</div>}
+                    </div>
+                  </div>
+                  
+                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 14px', fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center' }}>
+                    ℹ️ Order request is pending Admin review and PO generation.
+                  </div>
+                </div>
+              );
+            }
+            
+            return (
+              <div key={req.id} className="requested-order-card" style={{ textAlign: 'left' }}>
+                {/* Note: Requirement 9 completely removed the "Request Details" button from top header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                  <div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--primary-orange)' }}>
+                    Request ID: {req.id}
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                    {new Date(req.date).toLocaleDateString('en-GB')}
+                  </div>
+                </div>
+                
+                <div className="form-group" style={{ marginTop: '4px' }}>
                   <label>Product name</label>
                   <input type="text" className="form-control" value={current.productName} onChange={e => updateCardField(req.id, "productName", e.target.value)} />
                 </div>
@@ -1302,15 +1696,16 @@ export function RequestedOrdersView({ state, navigateTo, addNotification, openMo
                   </select>
                 </div>
 
+                {/* Requirement 10: Suggested Supplier Section Improvements */}
                 {req.suggestedSupplier && !ignoredSuggestions[req.id] && (
-                  <div style={{ background: 'var(--bg-cream)', padding: '12px', borderRadius: '8px', marginBottom: '12px', fontSize: '11px', textAlign: 'left', border: '1px solid var(--border-color)' }}>
+                  <div style={{ background: 'var(--bg-cream)', padding: '14px', borderRadius: '10px', marginBottom: '16px', fontSize: '12px', textAlign: 'left', border: '1px solid var(--border-color)' }}>
                     <div style={{ fontWeight: '850', color: 'var(--primary-orange)', textTransform: 'uppercase', letterSpacing: '0.3px', marginBottom: '6px' }}>Suggested Supplier Details:</div>
                     <div><b>Name:</b> {req.suggestedSupplier}</div>
                     {req.suggestedSupplierPhone && <div><b>Phone:</b> {req.suggestedSupplierPhone}</div>}
                     {req.suggestedSupplierEmail && <div><b>Email:</b> {req.suggestedSupplierEmail}</div>}
                     {req.suggestedSupplierRemarks && <div style={{ marginTop: '4px', fontStyle: 'italic', color: 'var(--text-muted)' }}><b>Remarks:</b> "{req.suggestedSupplierRemarks}"</div>}
                     
-                    <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
                       <button 
                         type="button" 
                         className="btn-orange" 
@@ -1319,48 +1714,63 @@ export function RequestedOrdersView({ state, navigateTo, addNotification, openMo
                           if (match) {
                             updateCardField(req.id, "supplierId", match.id);
                             setIgnoredSuggestions(prev => ({ ...prev, [req.id]: true }));
-                            state.showToast("Supplier Approved", `Auto-populated with ${match.companyName}`, "info");
+                            state.showToast("Supplier Approved", `Supplier set to ${match.companyName}`, "info");
                           } else {
-                            state.showToast("Supplier Match Failed", `No registered supplier matching "${req.suggestedSupplier}"`, "success");
+                            openSupplierPicker(req.id);
                           }
                         }}
-                        style={{ padding: '6px 12px', fontSize: '11px', cursor: 'pointer', flex: 1, height: '32px' }}
+                        style={{ padding: '6px 12px', fontSize: '11px', cursor: 'pointer', flex: 1, height: '34px', fontWeight: '800' }}
                       >
-                        ✓ Approve suggested
+                        ✓ Approve Supplier
                       </button>
+                      
+                      {/* Requirement 10: Change Supplier button with Search icon, professional non-red style */}
                       <button 
                         type="button" 
-                        className="btn-dark" 
                         onClick={() => {
-                          setIgnoredSuggestions(prev => ({ ...prev, [req.id]: true }));
-                          state.showToast("Suggestion Rejected", "You can manually select the supplier.", "info");
+                          openSupplierPicker(req.id);
                         }}
-                        style={{ padding: '6px 12px', fontSize: '11px', cursor: 'pointer', flex: 1, height: '32px', backgroundColor: 'var(--text-muted)' }}
+                        style={{ 
+                          padding: '6px 12px', 
+                          fontSize: '11px', 
+                          fontWeight: '800',
+                          cursor: 'pointer', 
+                          flex: 1, 
+                          height: '34px', 
+                          backgroundColor: 'transparent',
+                          color: '#d97706',
+                          border: '1.5px solid #d97706',
+                          borderRadius: '8px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px'
+                        }}
                       >
-                        ✕ Reject suggested
+                        <Icons.Search size={13} /> Change Supplier
                       </button>
                     </div>
                   </div>
                 )}
 
-                {/* Mobile-friendly Supplier selection button instead of dropdown */}
+                {/* Mobile-friendly Supplier selection field */}
                 <div className="form-group">
-                  <label>Select supplier</label>
+                  <label>Active Supplier</label>
                   <button type="button" className="form-control" style={{ textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: 'var(--card-bg)' }} onClick={() => openSupplierPicker(req.id)}>
-                    <span style={{ color: current.supplierId ? 'var(--text-main)' : 'var(--text-muted)' }}>
+                    <span style={{ color: current.supplierId ? 'var(--text-main)' : 'var(--text-muted)', fontWeight: current.supplierId ? '700' : 'normal' }}>
                       {current.supplierId ? state.suppliers.find(s => s.id === current.supplierId)?.companyName : "-- Choose Supplier --"}
                     </span>
                     <Icons.ChevronRight />
                   </button>
                 </div>
 
-                <div className="card-actions-row">
+                <div className="card-actions-row" style={{ marginTop: '20px' }}>
                   <button className="btn-dark" style={{ backgroundColor: 'var(--status-red)', marginBottom: 0, padding: '10px', cursor: 'pointer' }} onClick={() => handleReject(req.id)}>Reject</button>
-                  <button className="btn-orange" style={{ flex: 1.5, padding: '10px', cursor: 'pointer' }} onClick={() => handleApprove(req.id)}>Generate PO</button>
+                  <button className="btn-generate-po" style={{ flex: 1.5 }} onClick={() => handleApprove(req.id)}>Generate PO</button>
                 </div>
               </div>
             );
-          })
+          })()
         )}
       </div>
     </div>
@@ -1497,9 +1907,7 @@ export function PendingOrdersView({ state, navigateTo }) {
   const user = state.currentUser;
   const isEmployee = user.role === "Employee";
 
-  const filteredRequests = isEmployee 
-    ? state.requests.filter(r => r.employeeName === user.name && r.status === "Pending") 
-    : state.requests.filter(r => r.status === "Pending");
+  const filteredRequests = state.requests.filter(r => r.status === "Pending" && (!r.deletedByUserIds || !r.deletedByUserIds.includes(user.id)));
 
   const sorted = [...filteredRequests].sort((a, b) => {
     return new Date(b.date) - new Date(a.date);
@@ -1529,7 +1937,7 @@ export function PendingOrdersView({ state, navigateTo }) {
         ) : (
           sorted.map(req => {
             return (
-              <div key={req.id} className="live-order-card" onClick={() => navigateTo(`#order-details?id=${req.id}`)} style={{ cursor: 'pointer' }}>
+              <div key={req.id} className="live-order-card" onClick={() => navigateTo(`#requested-orders?id=${req.id}`)} style={{ cursor: 'pointer' }}>
                 <div className="card-header-row">
                   <h3>{req.productName}</h3>
                   <span className="badge-view-details">Details</span>
@@ -1549,6 +1957,98 @@ export function PendingOrdersView({ state, navigateTo }) {
         )}
       </div>
     </div>
+  );
+}
+
+// ----------------------------------------------------
+// Requirement 17: STATUS FILTER BUTTON COMPONENT
+// ----------------------------------------------------
+function StatusFilterButton({ tab, count, isActive, onClick, gridColumn }) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  const statusColors = {
+    "No Response": "#FC0000",
+    "Acknowledged": "#F28C28",
+    "Booked": "#2563EB",
+    "Received": "#22C55E",
+    "Delayed": "#F3C82A"
+  };
+
+  const statusColor = statusColors[tab] || "#000000";
+  const isDelayed = tab === "Delayed";
+
+  let bg = "#ffffff";
+  if (isActive) {
+    bg = statusColor;
+  } else if (isHovered) {
+    bg = `${statusColor}18`;
+  } else {
+    bg = `${statusColor}08`;
+  }
+
+  let textColor = "#1B1B1F";
+  if (isActive) {
+    textColor = isDelayed ? "#000000" : "#ffffff";
+  } else {
+    textColor = isDelayed ? "#855D00" : statusColor;
+  }
+
+  let shadow = "none";
+  if (isActive) {
+    shadow = `0 4px 14px ${statusColor}55, 0 2px 4px rgba(0,0,0,0.06)`;
+  } else if (isHovered) {
+    shadow = `0 0 10px ${statusColor}44`;
+  }
+
+  return (
+    <button 
+      type="button" 
+      onClick={onClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      style={{
+        gridColumn: gridColumn || 'auto',
+        display: 'inline-flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '4px',
+        padding: '8px 2px',
+        height: '56px',
+        border: `2px solid ${statusColor}`,
+        background: bg,
+        color: textColor,
+        borderRadius: '10px',
+        cursor: 'pointer',
+        boxShadow: shadow,
+        transform: isActive ? 'translateY(-2px)' : isHovered ? 'translateY(-1px)' : 'none',
+        transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        width: '100%',
+        boxSizing: 'border-box'
+      }}
+    >
+      <span style={{ 
+        fontSize: tab === "Acknowledged" ? '9px' : '10px', 
+        lineHeight: '1.1', 
+        textAlign: 'center', 
+        whiteSpace: 'normal', 
+        wordBreak: 'break-word', 
+        fontWeight: '800' 
+      }}>
+        {tab}
+      </span>
+      <span style={{ 
+        fontSize: '10px', 
+        background: isActive ? (isDelayed ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.25)') : `${statusColor}22`, 
+        color: isActive ? (isDelayed ? '#000000' : '#ffffff') : statusColor, 
+        padding: '1px 7px', 
+        borderRadius: '10px', 
+        fontWeight: '800',
+        transition: 'all 0.25s'
+      }}>
+        {count}
+      </span>
+    </button>
   );
 }
 
@@ -1575,9 +2075,12 @@ export function LiveOrdersView({ state, navigateTo }) {
       if (normalized === 'acknowledged') return 'Acknowledged';
       if (normalized === 'booked') return 'Booked';
       if (normalized === 'received') return 'Received';
+      if (normalized === 'delayed') return 'Delayed';
     }
     return 'No Response';
   });
+
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Track hash changes to update activeTab if navigated via smart view
   useEffect(() => {
@@ -1590,6 +2093,7 @@ export function LiveOrdersView({ state, navigateTo }) {
         if (normalized === 'acknowledged') setActiveTab('Acknowledged');
         if (normalized === 'booked') setActiveTab('Booked');
         if (normalized === 'received') setActiveTab('Received');
+        if (normalized === 'delayed') setActiveTab('Delayed');
       }
     };
     window.addEventListener('hashchange', handleHashChange);
@@ -1604,6 +2108,18 @@ export function LiveOrdersView({ state, navigateTo }) {
     filteredRequests = filteredRequests.filter(r => r.status === "Received" && isWithin14Days(r.actualDeliveryDate));
   } else {
     filteredRequests = filteredRequests.filter(r => r.status === activeTab);
+  }
+
+  // Apply Smart Search (Requirement 11)
+  if (searchQuery.trim()) {
+    const kws = searchQuery.toLowerCase().split(/\s+/).filter(k => k.trim());
+    filteredRequests = filteredRequests.filter(r => {
+      const prodName = (r.productName || "").toLowerCase();
+      const desc = (r.description || "").toLowerCase();
+      const poNum = (r.poNumber || r.id || "").toLowerCase();
+      const supName = (state.suppliers.find(s => s.id === r.supplierId)?.companyName || r.suggestedSupplier || "").toLowerCase();
+      return kws.every(kw => prodName.includes(kw) || desc.includes(kw) || poNum.includes(kw) || supName.includes(kw));
+    });
   }
 
   const sorted = [...filteredRequests].sort((a, b) => {
@@ -1627,10 +2143,53 @@ export function LiveOrdersView({ state, navigateTo }) {
       </header>
 
       <div style={{ paddingTop: '10px' }}>
-        {/* Tab Filters */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', marginBottom: '16px', background: 'var(--card-bg)', borderRadius: '8px', padding: '4px', gap: '4px' }}>
-          {["No Response", "Acknowledged", "Booked", "Received"].map(tab => {
-            const isActive = activeTab === tab;
+        {/* Smart Search Bar */}
+        <div style={{ marginBottom: '16px', position: 'relative' }}>
+          <input 
+            type="text" 
+            className="form-control" 
+            placeholder="Search by PO number, product name, supplier, or description..." 
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            style={{ 
+              paddingLeft: '38px', 
+              borderRadius: '12px', 
+              height: '42px', 
+              fontSize: '13px', 
+              cursor: 'text',
+              border: '1px solid var(--border-color)',
+              boxShadow: 'var(--shadow-sm)'
+            }}
+          />
+          <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </div>
+          {searchQuery && (
+            <button 
+              onClick={() => setSearchQuery("")}
+              style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+        {/* Tab Filters (Requirement 17 Grid Layout & Workflow Styling) */}
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(4, 1fr)', 
+          gap: '8px', 
+          marginBottom: '16px', 
+          background: '#ffffff', 
+          borderRadius: '16px', 
+          padding: '12px 10px', 
+          boxShadow: 'var(--shadow-sm)',
+          border: '1px solid var(--border-color)',
+          boxSizing: 'border-box'
+        }}>
+          {["No Response", "Acknowledged", "Booked", "Received", "Delayed"].map(tab => {
             let count = 0;
             if (tab === "Received") {
               count = isEmployee 
@@ -1643,45 +2202,63 @@ export function LiveOrdersView({ state, navigateTo }) {
             }
             
             return (
-              <button 
+              <StatusFilterButton 
                 key={tab} 
-                onClick={() => setActiveTab(tab)}
-                style={{
-                  flex: 1,
-                  padding: '8px 2px',
-                  fontSize: '11px',
-                  fontWeight: '800',
-                  border: 'none',
-                  background: isActive ? 'var(--primary-orange)' : 'transparent',
-                  color: isActive ? '#ffffff' : 'var(--text-main)',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '2px'
-                }}
-              >
-                <span>{tab}</span>
-                <span style={{ fontSize: '10px', background: isActive ? 'rgba(255,255,255,0.25)' : 'var(--bg-cream)', color: isActive ? '#fff' : 'var(--text-muted)', padding: '1px 6px', borderRadius: '10px', fontWeight: 'bold' }}>{count}</span>
-              </button>
+                tab={tab} 
+                count={count} 
+                isActive={activeTab === tab} 
+                onClick={() => setActiveTab(tab)} 
+                gridColumn={tab === "Delayed" ? "2 / 3" : undefined}
+              />
             );
           })}
         </div>
 
         {sorted.length === 0 ? (
           <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)', background: 'var(--card-bg)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-            No active orders in "{activeTab}" stage.
+            {searchQuery.trim() ? "No matching orders found." : `No active orders in "${activeTab}" stage.`}
           </div>
         ) : (
           sorted.map(req => {
             const supplier = state.suppliers.find(s => s.id === req.supplierId) || { companyName: "Not Assigned" };
+            const displayPoNumber = req.poNumber || req.id;
             return (
               <div key={req.id} className="live-order-card" onClick={() => navigateTo(`#order-details?id=${req.id}`)} style={{ cursor: 'pointer' }}>
                 <div className="card-header-row">
                   <h3>{supplier.companyName}</h3>
-                  <span className="badge-view-details">View Details</span>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    {req.status === "No Response" && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigateTo(`#create-request?clone=${req.id}`);
+                        }}
+                        style={{
+                          backgroundColor: 'var(--primary-orange)',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '8px',
+                          padding: '4px 10px',
+                          fontSize: '11px',
+                          fontWeight: '800',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          boxShadow: 'var(--shadow-sm)',
+                          transition: 'all 0.2s',
+                          boxSizing: 'border-box',
+                          height: '24px',
+                          lineHeight: '1'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#d36c28'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--primary-orange)'}
+                      >
+                        Recent Order
+                      </button>
+                    )}
+                    <span className="badge-view-details">View Details</span>
+                  </div>
                 </div>
                 
                 <div className="card-product-line">
@@ -1689,7 +2266,7 @@ export function LiveOrdersView({ state, navigateTo }) {
                 </div>
 
                 <div className="card-status-line">
-                  <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>{req.id}</span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '11px', fontWeight: '800' }}>PO: {displayPoNumber}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span className={`status-badge ${req.status.toLowerCase().replace(/ /g, '')}`}>{req.status}</span>
                   </div>
@@ -1712,9 +2289,18 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
 
   if (!req) return <p style={{ padding: '20px' }}>Order not found</p>;
 
+  if (req.status === "Pending") {
+    setTimeout(() => {
+      navigateTo(`#requested-orders?id=${req.id}`);
+    }, 0);
+    return null;
+  }
+
   const supplier = state.suppliers.find(s => s.id === req.supplierId) || { companyName: "Not Assigned" };
   const dateStr = new Date(req.date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
   const timeStr = new Date(req.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+  const hasEditPermission = state.currentUser.role === 'Main Admin' || (state.currentUser.role === 'Sub Admin' && state.currentUser.permissions?.edit_orders);
 
   const handleProofCamera = async (e) => {
     const file = e.target.files[0];
@@ -1766,30 +2352,51 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
   const logisticsStatus = getLogisticsStatus(req);
   const trackingStages = ["Order Placed", "Acknowledged", "Booked", "Received"];
 
+  const getExpectedDispatch = () => {
+    if (req.expectedDispatchDate) {
+      return req.expectedDispatchDate.split('T')[0];
+    }
+    const d = new Date(req.date);
+    d.setDate(d.getDate() + 3);
+    return d.toISOString().split('T')[0];
+  };
+  const expDateStr = getExpectedDispatch();
+
   let progressWidth = 0;
   if (logisticsStatus === "No Response") progressWidth = 0;
   else if (logisticsStatus === "Acknowledged") progressWidth = 33;
   else if (logisticsStatus === "Booked") progressWidth = 66;
   else if (logisticsStatus === "Received") progressWidth = 100;
 
-  const getTimelineDate = (statusName) => {
+  const getTimelineInfo = (statusName) => {
     if (statusName === "No Response") {
-      return req.date;
+      return {
+        date: req.date,
+        updatedBy: req.employeeName || "Employee"
+      };
     }
     const entry = req.history && req.history.find(h => h.status === statusName);
-    return entry ? entry.timestamp : null;
+    return entry ? { date: entry.timestamp, updatedBy: entry.updatedBy } : null;
   };
 
-  const handleStatusChange = async (newStatus, remarks = "", proofOfReceipt = null, proofOfReceiptName = "") => {
+  const handleStatusChange = async (newStatus, remarks = "", proofOfReceipt = null, proofOfReceiptName = "", lrData = null, lrName = "", newDispatchDate = null) => {
     if (!newStatus) return;
     const prevStatus = req.status;
+
+    let remarksStr = `Field [Status] modified from "${prevStatus}" to "${newStatus}".`;
+    if (newStatus === "Received" && proofOfReceiptName) {
+      remarksStr += ` Field [Proof of Receipt] modified from "None" to "${proofOfReceiptName}".`;
+    }
+    if (remarks) {
+      remarksStr += ` Remarks: ${remarks}`;
+    }
 
     const updatedHistory = [...req.history, {
       status: newStatus,
       updatedBy: state.currentUser.name,
       role: state.currentUser.role,
       timestamp: new Date().toISOString(),
-      remarks: remarks || `Status changed from ${prevStatus} to ${newStatus}.`
+      remarks: remarksStr
     }];
 
     const updatedReq = {
@@ -1797,7 +2404,10 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
       status: newStatus,
       history: updatedHistory,
       proofOfReceipt: proofOfReceipt || req.proofOfReceipt || null,
-      proofOfReceiptName: proofOfReceiptName || req.proofOfReceiptName || ""
+      proofOfReceiptName: proofOfReceiptName || req.proofOfReceiptName || "",
+      lrCopy: lrData || req.lrCopy || null,
+      lrFileName: lrName || req.lrFileName || "",
+      expectedDispatchDate: newDispatchDate || req.expectedDispatchDate || expDateStr
     };
 
     if (newStatus === "Received") {
@@ -1807,14 +2417,160 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
     const saved = await apiService.updateRequest(requestId, updatedReq);
     state.setRequests(state.requests.map(r => r.id === requestId ? saved : r));
 
-    state.logEvent("Status Changed Manually", prevStatus, newStatus, `Manual status override to: ${newStatus}`);
-    addNotification("Status Updated", `Order ${requestId} status is now ${newStatus}.`, "Both");
+    state.logEvent("Status Changed Manually", prevStatus, newStatus, remarksStr);
+    addNotification("Status Updated", `Order ${req.poNumber || requestId} status updated to ${newStatus}.`, "Both");
 
     let eventKey = "request.updated";
     if (newStatus === "Booked") eventKey = "request.transit";
     else if (newStatus === "Received") eventKey = "request.delivered";
 
     state.triggerWebhook(eventKey, saved);
+  };
+
+  // Requirement 3 & 4: Status Transition Handler
+  const promptStatusChangeModal = (targetStatus) => {
+    if (!targetStatus || targetStatus === req.status) return;
+
+    const sequence = ["No Response", "Acknowledged", "Booked", "Received"];
+    let currentStatusName = req.status;
+
+    if (currentStatusName === "Order Placed") currentStatusName = "No Response";
+    if (currentStatusName === "Delayed") {
+      const lastValid = req.history?.slice().reverse().find(h => sequence.includes(h.status));
+      currentStatusName = lastValid ? lastValid.status : "No Response";
+    }
+
+    const currentIdx = sequence.indexOf(currentStatusName);
+    const targetIdx = sequence.indexOf(targetStatus);
+
+    const isMovingForward = targetIdx > currentIdx && targetStatus !== "Rejected";
+    const isRejected = targetStatus === "Rejected";
+
+    // Requirement 3: Moving Forward in sequence -> smooth 1-click workflow without confirmation modal
+    if (isMovingForward && !isRejected) {
+      handleStatusChange(targetStatus);
+      return;
+    }
+
+    // Rolling back or Rejected status requires confirmation modal
+    let remarks = "";
+    let tempLrFile = req.lrCopy || null;
+    let tempLrFileName = req.lrFileName || "";
+
+    const renderModalBody = (err = "") => {
+      return (
+        <div style={{ textAlign: 'left', fontFamily: 'var(--font-family)' }}>
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px', marginBottom: '16px' }}>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+              {isRejected ? 'Confirm Order Rejection' : 'Confirm Workflow Rollback'}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '15px', fontWeight: '800' }}>
+              <span style={{ color: 'var(--text-muted)' }}>{req.status}</span>
+              <span style={{ color: 'var(--primary-orange)' }}>&rarr;</span>
+              <span style={{ color: isRejected ? 'var(--status-red)' : 'var(--text-main)', textDecoration: 'underline' }}>{targetStatus}</span>
+            </div>
+          </div>
+
+          {/* Requirement 4: Display Supplier Name for Rejected status */}
+          {isRejected && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#991b1b' }}>
+              <b>Supplier Name:</b> {supplier.companyName || req.suggestedSupplier || "Not Assigned"}
+            </div>
+          )}
+
+          {err && (
+            <div style={{ background: '#fef2f2', border: '1.5px solid #fecaca', color: '#b91c1c', padding: '10px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', marginBottom: '14px' }}>
+              ⚠️ {err}
+            </div>
+          )}
+
+          {/* Optional LR Copy upload (without "(Optional)" label text) */}
+          <div className="form-group" style={{ marginBottom: '16px' }}>
+            <label>LR (Lorry Receipt) Document</label>
+            {tempLrFile ? (
+              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '10px 14px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#16a34a' }}>✓ LR Attached {tempLrFileName ? `(${tempLrFileName})` : ''}</span>
+                <label style={{ fontSize: '11px', color: 'var(--primary-orange)', cursor: 'pointer', fontWeight: 'bold', textDecoration: 'underline' }}>
+                  Change File
+                  <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,image/*" style={{ display: 'none' }} onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      tempLrFile = reader.result;
+                      tempLrFileName = file.name;
+                      setModalContent(renderModalBody(""));
+                    };
+                    reader.readAsDataURL(file);
+                  }} />
+                </label>
+              </div>
+            ) : (
+              <div>
+                <label className="lr-upload-box" style={{ margin: 0, padding: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Attach LR Document</span>
+                  <span className="badge-view-lr">Upload File</span>
+                  <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,image/*" style={{ display: 'none' }} onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      tempLrFile = reader.result;
+                      tempLrFileName = file.name;
+                      setModalContent(renderModalBody(""));
+                    };
+                    reader.readAsDataURL(file);
+                  }} />
+                </label>
+              </div>
+            )}
+          </div>
+
+          {/* Mandatory Remarks Field for Rollback & Rejection */}
+          <div className="form-group" style={{ marginBottom: '20px' }}>
+            <label>Remarks <span style={{ color: 'var(--status-red)' }}>*</span></label>
+            <textarea 
+              className="form-control" 
+              rows="3" 
+              placeholder={isRejected ? "Enter mandatory rejection remarks..." : "Enter mandatory rollback remarks..."} 
+              onChange={e => { remarks = e.target.value; }} 
+              style={{ cursor: 'text' }}
+              autoFocus
+            ></textarea>
+          </div>
+
+          <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+            <button 
+              type="button"
+              className="btn-dark" 
+              style={{ flex: 1, backgroundColor: '#4B5563', marginBottom: 0, padding: '10px 16px', height: '42px', fontSize: '13px', borderRadius: '8px', cursor: 'pointer' }} 
+              onClick={closeModal}
+            >
+              Cancel
+            </button>
+            <button 
+              type="button"
+              className={isRejected ? "btn-dark" : "btn-orange"} 
+              style={{ flex: 1.5, marginBottom: 0, padding: '10px 16px', height: '42px', fontSize: '13px', borderRadius: '8px', cursor: 'pointer', backgroundColor: isRejected ? 'var(--status-red)' : undefined }}
+              onClick={() => {
+                if (!remarks || !remarks.trim()) {
+                  setModalContent(renderModalBody("Remarks are required to proceed."));
+                  return;
+                }
+
+                handleStatusChange(targetStatus, remarks.trim(), null, "", tempLrFile, tempLrFileName);
+                closeModal();
+              }}
+            >
+              {isRejected ? "Confirm Reject" : "Confirm Rollback"}
+            </button>
+          </div>
+        </div>
+      );
+    };
+
+    setModalContent(renderModalBody(""), isRejected ? "Confirm Order Rejection" : "Confirm Status Rollback");
+    openModal();
   };
 
   const handleFileSelect = (e) => {
@@ -1839,12 +2595,13 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
     const reader = new FileReader();
     reader.onloadend = async () => {
       const base64data = reader.result;
+      const remarksStr = `Field [Status] modified from "${req.status}" to "Booked". Field [LR Copy] modified from "None" to "${selectedFileName}".`;
       const updatedHistory = [...req.history, {
         status: "Booked",
         updatedBy: state.currentUser.name,
         role: state.currentUser.role,
         timestamp: new Date().toISOString(),
-        remarks: `Uploaded LR consignment copy: ${selectedFileName}`
+        remarks: remarksStr
       }];
 
       const updatedReq = {
@@ -1858,7 +2615,7 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
       const saved = await apiService.updateRequest(requestId, updatedReq);
       state.setRequests(state.requests.map(r => r.id === requestId ? saved : r));
 
-      state.logEvent("Uploaded LR Consignment", req.status, "Booked", `Uploaded copy ${selectedFileName} for ${requestId}`);
+      state.logEvent("Uploaded LR Consignment", req.status, "Booked", remarksStr);
       addNotification("Order Booked", `LR Copy ${selectedFileName} has been uploaded. Status is now Booked.`, "Both");
       state.triggerWebhook("status.changed", saved);
 
@@ -1953,7 +2710,110 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
     openModal();
   };
 
-  const hasEditPermission = state.currentUser.role === 'Main Admin' || (state.currentUser.role === 'Sub Admin' && state.currentUser.permissions?.edit_orders);
+  // Requirement 9: Edit Expected Dispatch Date (Date only YYYY-MM-DD)
+  const handleEditDispatchDate = () => {
+    const currentVal = expDateStr;
+    let selectedDate = currentVal;
+    
+    setModalContent(
+      <div style={{ textAlign: 'left' }}>
+        <p style={{ fontSize: '13px', marginBottom: '16px' }}>
+          Update the <b>Expected Dispatch Date</b> for order <b>{req.poNumber || req.id}</b>:
+        </p>
+        <div className="form-group" style={{ marginBottom: '16px' }}>
+          <label>Expected Dispatch Date (YYYY-MM-DD)</label>
+          <input 
+            type="date" 
+            className="form-control" 
+            defaultValue={currentVal}
+            onChange={e => { selectedDate = e.target.value; }}
+            style={{ cursor: 'text' }}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button 
+            className="btn-dark" 
+            style={{ flex: 1, backgroundColor: '#4B5563', marginBottom: 0, cursor: 'pointer' }} 
+            onClick={closeModal}
+          >
+            Cancel
+          </button>
+          <button 
+            className="btn-orange" 
+            style={{ flex: 1.5, cursor: 'pointer' }}
+            onClick={async () => {
+              if (!selectedDate) {
+                state.showToast("Validation Error", "Please select a valid date.", "success");
+                return;
+              }
+              
+              const oldDateStr = expDateStr;
+              const newDateStr = selectedDate;
+              
+              try {
+                const todayStr = new Date().toISOString().split('T')[0];
+                let nextStatus = req.status;
+                
+                if (newDateStr < todayStr) {
+                  if (req.status !== "Booked" && req.status !== "Received" && req.status !== "Rejected") {
+                    nextStatus = "Delayed";
+                  }
+                } else {
+                  if (req.status === "Delayed") {
+                    nextStatus = getRevertStatus(req);
+                  }
+                }
+                
+                const historyEntry = {
+                  status: nextStatus,
+                  updatedBy: state.currentUser.name,
+                  role: state.currentUser.role,
+                  timestamp: new Date().toISOString(),
+                  remarks: `Changed Expected Dispatch Date from ${oldDateStr} to ${newDateStr}.`
+                };
+                
+                const updatedReq = {
+                  ...req,
+                  expectedDispatchDate: newDateStr,
+                  status: nextStatus,
+                  history: [...(req.history || []), historyEntry]
+                };
+                
+                await apiService.updateRequest(req.id, updatedReq);
+                state.setRequests(state.requests.map(r => r.id === req.id ? updatedReq : r));
+                
+                state.logEvent(
+                  "Changed Expected Dispatch Date",
+                  oldDateStr,
+                  newDateStr,
+                  `${state.currentUser.name} (${state.currentUser.role}) changed Expected Dispatch Date from ${oldDateStr} to ${newDateStr}`
+                );
+                
+                state.showToast("Success", "Expected Dispatch Date updated successfully.", "success");
+                closeModal();
+              } catch (err) {
+                state.showToast("Error", err.message || "Failed to save date.", "success");
+              }
+            }}
+          >
+            Save Changes
+          </button>
+        </div>
+      </div>,
+      "Edit Expected Dispatch"
+    );
+    openModal();
+  };
+
+  // Requirement 5: Prompt for Expected Dispatch Date if missing when Admin opens order
+  useEffect(() => {
+    if (hasEditPermission && (!req.expectedDispatchDate || req.expectedDispatchDate === "")) {
+      const timer = setTimeout(() => {
+        handleEditDispatchDate();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [req.id, req.expectedDispatchDate]);
 
   return (
     <div>
@@ -1964,34 +2824,103 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
           </button>
           <h1 style={{ fontSize: '18px' }}>Order details</h1>
         </div>
+        {req.status === "No Response" && (
+          <button
+            onClick={() => navigateTo(`#create-request?clone=${req.id}`)}
+            style={{
+              backgroundColor: 'var(--primary-orange)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '6px 12px',
+              fontSize: '11px',
+              fontWeight: '800',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              boxShadow: 'var(--shadow-sm)',
+              transition: 'all 0.2s',
+              marginRight: '8px',
+              height: '28px',
+              lineHeight: '1',
+              boxSizing: 'border-box'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#d36c28'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--primary-orange)'}
+          >
+            Recent Order
+          </button>
+        )}
       </header>
 
       <div style={{ paddingTop: '10px' }}>
-        <div style={{ background: 'var(--dark-charcoal)', color: '#ffffff', borderRadius: '12px', padding: '16px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: 'var(--shadow-md)' }}>
-          <div style={{ textAlign: 'left' }}>
-            <div style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: '#a0978d', letterSpacing: '0.5px' }}>Current Order Status</div>
-            <div style={{ fontSize: '20px', fontWeight: '800', marginTop: '4px', color: '#ffffff' }}>{req.status}</div>
-          </div>
-          <span className={`status-badge ${req.status.toLowerCase().replace(/ /g, '')}`} style={{ padding: '8px 16px', fontSize: '13px', fontWeight: 'bold' }}>{req.status}</span>
-        </div>
+        {(() => {
+          const statusColors = {
+            "Pending": "#E67E22",
+            "No Response": "#FC0000",
+            "Acknowledged": "#F28C28",
+            "Booked": "#2563EB",
+            "Received": "#22C55E",
+            "Delayed": "#F3C82A"
+          };
+          const currentStatusBg = statusColors[req.status] || 'var(--dark-charcoal)';
+          const currentStatusText = req.status === "Delayed" ? '#000000' : '#ffffff';
+          const labelColor = req.status === "Delayed" ? 'rgba(0, 0, 0, 0.6)' : 'rgba(255, 255, 255, 0.8)';
 
-        <div className="timeline-container" style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '20px', marginBottom: '20px' }}>
+          return (
+            /* Requirement 2: High contrast, prominent current status card header */
+            <div style={{ 
+              background: currentStatusBg, 
+              color: currentStatusText, 
+              borderRadius: '16px', 
+              padding: '18px 20px', 
+              marginBottom: '20px', 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              boxShadow: `0 6px 20px ${currentStatusBg}40`,
+              border: req.status === "Delayed" ? '2px solid #D97706' : 'none',
+              transition: 'all 0.3s ease'
+            }}>
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', color: labelColor, letterSpacing: '0.8px' }}>Current Order Status</div>
+                <div style={{ fontSize: '22px', fontWeight: '900', marginTop: '2px', color: currentStatusText, letterSpacing: '0.3px' }}>{req.status}</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', color: labelColor, letterSpacing: '0.8px' }}>Expected Dispatch</div>
+                  {hasEditPermission && (
+                    <button 
+                      onClick={handleEditDispatchDate} 
+                      style={{ background: 'none', border: 'none', color: currentStatusText, cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      title="Edit Expected Dispatch Date"
+                    >
+                      <Icons.Edit size={13} />
+                    </button>
+                  )}
+                </div>
+                <div style={{ fontSize: '16px', fontWeight: '900', marginTop: '2px', color: currentStatusText }}>{expDateStr}</div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Requirement 2: Visual hierarchy for stage indicator - Active status clearly highlighted, others slightly dimmed */}
+        <div className="timeline-container" style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '20px', marginBottom: '20px', boxShadow: 'var(--shadow-sm)' }}>
           <div className="timeline">
             {(() => {
               const trackingStageColors = {
-                "Order Placed": "#ef4444",
-                "Acknowledged": "#f97316",
-                "Booked": "#3b82f6",
-                "Received": "#10b981"
+                "Order Placed": "#FC0000",
+                "Acknowledged": "#F28C28",
+                "Booked": "#2563EB",
+                "Received": "#22C55E"
               };
-              const currentStageColor = trackingStageColors[
-                logisticsStatus === "No Response" ? "Order Placed" : logisticsStatus
-              ] || "#ef4444";
               
               return (
                 <>
                   <div style={{ position: 'absolute', top: '15px', left: '20px', right: '20px', height: '4px', zIndex: 2 }}>
-                    <div style={{ width: `${progressWidth}%`, height: '100%', backgroundColor: currentStageColor, transition: 'width 0.4s ease' }}></div>
+                    <div style={{ width: `${progressWidth}%`, height: '100%', backgroundColor: '#6B7280', transition: 'width 0.4s ease' }}></div>
                   </div>
                   {trackingStages.map((stage, idx) => {
                     const isActive = stage === (logisticsStatus === "No Response" ? "Order Placed" : logisticsStatus);
@@ -1999,19 +2928,39 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
                     const stageColor = trackingStageColors[stage] || "var(--status-green)";
                     
                     return (
-                      <div key={stage} className={`timeline-step ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}>
+                      <div 
+                        key={stage} 
+                        className={`timeline-step ${isActive ? 'active' : isCompleted ? 'completed' : 'future'}`}
+                        style={{ 
+                          opacity: 1,
+                          transform: isActive ? 'scale(1.06)' : 'none',
+                          transition: 'all 0.3s ease'
+                        }}
+                      >
                         <div 
                           className="timeline-dot"
                           style={{
-                            backgroundColor: isCompleted ? stageColor : 'var(--card-bg)',
-                            borderColor: isCompleted ? stageColor : 'var(--border-color)',
-                            color: isCompleted ? '#ffffff' : 'var(--text-muted)',
-                            boxShadow: isActive ? `0 0 0 4px ${stageColor}40` : 'none'
+                            backgroundColor: isCompleted ? stageColor : '#F3F4F6',
+                            borderColor: isCompleted ? stageColor : '#9CA3AF',
+                            color: isCompleted ? '#ffffff' : '#374151',
+                            fontWeight: '800',
+                            boxShadow: isActive ? `0 0 0 5px ${stageColor}40, 0 4px 14px ${stageColor}44` : 'none',
+                            width: isActive ? '28px' : '24px',
+                            height: isActive ? '28px' : '24px'
                           }}
                         >
-                          {idx + 1}
+                          {isCompleted ? <Icons.Check style={{ width: '12px', height: '12px' }} /> : idx + 1}
                         </div>
-                        <div className="timeline-label">{stage}</div>
+                        <div 
+                          className="timeline-label"
+                          style={{
+                            fontWeight: isActive ? '900' : '700',
+                            color: isActive ? 'var(--text-main)' : isCompleted ? 'var(--text-main)' : '#374151',
+                            fontSize: isActive ? '12px' : '11px'
+                          }}
+                        >
+                          {stage}
+                        </div>
                       </div>
                     );
                   })}
@@ -2025,7 +2974,7 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
           <h3 style={{ fontSize: '16px', fontWeight: '800', textAlign: 'left', color: 'var(--text-main)' }}>Supplier: {supplier.companyName}</h3>
         </div>
 
-        {req.poNumber && <div style={{ fontSize: '12px', marginBottom: '14px', textAlign: 'left' }}><b>PO Ref:</b> {req.poNumber} ({formatDate(req.poDate)})</div>}
+        {req.poNumber && <div style={{ fontSize: '12px', marginBottom: '14px', textAlign: 'left' }}><b>PO Ref:</b> {req.poNumber} ({new Date(req.poDate).toLocaleDateString('en-GB')})</div>}
 
         {req.proofOfReceipt && (
           <div style={{ background: '#f0fdf4', border: '1.5px solid #dcfce7', borderRadius: '12px', padding: '16px', marginBottom: '20px', textAlign: 'left' }}>
@@ -2036,10 +2985,11 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
           </div>
         )}
 
+        {/* Display Uploaded LR Document (Requirement 4) */}
         {req.lrCopy ? (
           <div className="lr-upload-box" style={{ borderStyle: 'solid', backgroundColor: '#f0fdf4', borderColor: 'var(--status-green)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={handleViewLr}>
             <div className="lr-text-primary" style={{ color: 'var(--status-green)' }}>
-              LR Copy Attached {req.lrFileName ? `(${req.lrFileName})` : ''}
+              ✓ LR Copy Attached {req.lrFileName ? `(${req.lrFileName})` : ''}
             </div>
             <span className="badge-view-lr" style={{ backgroundColor: 'var(--status-green)' }}>View LR</span>
           </div>
@@ -2064,55 +3014,98 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
           </div>
         )}
 
-        <div className="timeline-container" style={{ textAlign: 'left', marginBottom: '20px' }}>
-          <h4 style={{ fontSize: '12px', fontWeight: '700', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Logistics timeline</h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', position: 'relative', paddingLeft: '24px', borderLeft: '2px solid var(--border-color)', marginLeft: '12px' }}>
+        {/* Requirement 1: Light-themed Logistics Timeline section */}
+        <div className="logistics-timeline-card" style={{ 
+          background: 'var(--card-bg)', 
+          color: 'var(--text-main)', 
+          borderRadius: '16px', 
+          padding: '20px', 
+          marginBottom: '20px', 
+          textAlign: 'left',
+          border: '1px solid var(--border-color)',
+          boxShadow: 'var(--shadow-sm)'
+        }}>
+          <h4 style={{ fontSize: '13px', fontWeight: '800', marginBottom: '18px', textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--primary-orange)' }}>
+            Logistics timeline
+          </h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', position: 'relative', paddingLeft: '24px', borderLeft: '2px solid #E5E7EB', marginLeft: '12px' }}>
             {[
-              { label: "Order Placed On", status: "No Response" },
-              { label: "Acknowledged On", status: "Acknowledged" },
-              { label: "Booked On", status: "Booked" },
-              { label: "Received On", status: "Received" }
+              { label: "Order Placed", status: "No Response" },
+              { label: "Acknowledged", status: "Acknowledged" },
+              { label: "Booked", status: "Booked" },
+              { label: "Received", status: "Received" }
             ].map((stage, idx) => {
-              const date = getTimelineDate(stage.status);
-              const isCompleted = !!date;
-              const isCurrent = req.status === stage.status;
+              const stageSequence = ["No Response", "Acknowledged", "Booked", "Received"];
+              const currentStageIdx = stageSequence.indexOf(logisticsStatus);
+              const info = getTimelineInfo(stage.status);
+              const isCompleted = idx <= currentStageIdx && !!info;
+              const isCurrent = logisticsStatus === stage.status;
               
               const stageColors = {
-                "No Response": "#ef4444",
-                "Acknowledged": "#f97316",
-                "Booked": "#3b82f6",
-                "Received": "#10b981"
+                "No Response": "#FC0000",
+                "Acknowledged": "#F28C28",
+                "Booked": "#2563EB",
+                "Received": "#22C55E"
               };
               const dotColor = stageColors[stage.status] || "var(--status-green)";
               
               return (
-                <div key={idx} style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div 
+                  key={idx} 
+                  style={{ 
+                    position: 'relative', 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    padding: '12px 16px', 
+                    borderRadius: '10px',
+                    background: isCurrent ? 'rgba(242,140,40,0.08)' : isCompleted ? '#f8fafc' : 'transparent',
+                    border: isCurrent ? '1.5px solid var(--primary-orange)' : '1px solid #E5E7EB',
+                    boxShadow: isCurrent ? '0 2px 8px rgba(242,140,40,0.12)' : 'none',
+                    boxSizing: 'border-box'
+                  }}
+                >
                   <div style={{ 
                     position: 'absolute', 
                     left: '-35px', 
-                    top: '2px', 
+                    top: '50%', 
+                    transform: 'translateY(-50%)',
                     width: '20px', 
                     height: '20px', 
                     borderRadius: '50%', 
-                    backgroundColor: isCompleted ? dotColor : 'var(--text-muted)', 
+                    backgroundColor: isCompleted ? dotColor : '#D1D5DB', 
                     color: 'white', 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center',
                     border: isCurrent ? `3.5px solid ${dotColor}` : '3px solid #ffffff',
-                    boxShadow: isCurrent ? `0 0 8px ${dotColor}` : 'none',
+                    boxShadow: isCurrent ? `0 0 8px ${dotColor}55` : 'none',
                     zIndex: 2
                   }}>
-                    {isCompleted ? <Icons.Check style={{ width: '10px', height: '10px' }} /> : <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#fff' }}></div>}
+                    {isCompleted ? <Icons.Check style={{ width: '10px', height: '10px' }} /> : <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#ffffff' }}></div>}
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontWeight: '800', fontSize: '14px', color: isCompleted ? 'var(--text-main)' : 'var(--text-muted)' }}>{stage.label}</span>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', textAlign: 'left' }}>
+                    <span style={{ fontWeight: isCurrent || isCompleted ? '800' : '600', fontSize: '14px', color: isCompleted || isCurrent ? 'var(--text-main)' : 'var(--text-muted)' }}>
+                      {stage.label}
+                    </span>
                     {isCompleted && (
                       <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        {new Date(date).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        Updated by: <b style={{ color: 'var(--text-main)' }}>{info.updatedBy}</b>
                       </span>
                     )}
                   </div>
+
+                  {isCompleted && (
+                    <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                      <span style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-main)' }}>
+                        {new Date(info.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                      </span>
+                      <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        {new Date(info.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -2132,51 +3125,42 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
           </button>
         )}
 
+        {/* Requirements 2, 3, 4: Status Change Dropdown triggers confirmation modal */}
         {hasEditPermission && (
           <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <div className="form-group" style={{ margin: 0 }}>
               <label>Change status</label>
-              <select className="form-control" onChange={e => handleStatusChange(e.target.value)} defaultValue="" style={{ cursor: 'pointer' }}>
+              <select 
+                className="form-control" 
+                onChange={e => {
+                  const val = e.target.value;
+                  e.target.value = ""; // Reset dropdown value
+                  promptStatusChangeModal(val);
+                }} 
+                defaultValue="" 
+                style={{ cursor: 'pointer' }}
+              >
                 <option value="" disabled>-- Choose New Status --</option>
-                {["No Response", "Acknowledged", "Booked", "Received", "Rejected", "Cancelled"].map(s => {
+                {["No Response", "Acknowledged", "Booked", "Received", "Rejected"].map(s => {
                   const sequence = ["No Response", "Acknowledged", "Booked", "Received"];
-                  let currentIdx = sequence.indexOf(req.status);
-                  if (currentIdx === -1 && req.history) {
-                    for (let i = req.history.length - 1; i >= 0; i--) {
-                      const histStatus = req.history[i].status;
-                      const idx = sequence.indexOf(histStatus);
-                      if (idx !== -1) {
-                        currentIdx = idx;
-                        break;
-                      }
-                    }
-                  }
+                  const currentIdx = sequence.indexOf(req.status === "Order Placed" ? "No Response" : req.status);
                   const targetIdx = sequence.indexOf(s);
-
-                  let disabled = false;
+                  
                   let optionLabel = s;
+                  let disabled = s === req.status;
 
-                  if (targetIdx !== -1 && currentIdx !== -1) {
-                    if (targetIdx <= currentIdx) {
-                      optionLabel = `${s} (Completed)`;
-                      disabled = true;
-                    } else if (targetIdx > currentIdx + 1) {
-                      disabled = true;
+                  if (s === req.status) {
+                    optionLabel = `${s} (Current)`;
+                  } else if (targetIdx !== -1 && currentIdx !== -1) {
+                    if (targetIdx < currentIdx) {
+                      optionLabel = `${s} (Move Back)`;
                     } else if (targetIdx === currentIdx + 1) {
                       optionLabel = `${s} (Next Stage)`;
                     }
-                  } else if (s === "Rejected" || s === "Cancelled") {
-                    disabled = req.status === "Received";
-                  } else {
-                    disabled = true;
                   }
 
-                  const optionStyle = (targetIdx !== -1 && targetIdx <= currentIdx)
-                    ? { color: '#9ca3af', textDecoration: 'line-through' }
-                    : disabled ? { color: '#d1d5db' } : {};
-
                   return (
-                    <option key={s} value={s} disabled={disabled} style={optionStyle}>
+                    <option key={s} value={s} disabled={disabled}>
                       {optionLabel}
                     </option>
                   );
@@ -2194,14 +3178,9 @@ export function OrderDetailsView({ state, navigateTo, requestId, addNotification
 // ----------------------------------------------------
 // Password Strength Validator Helper & UI Indicator Component
 // ----------------------------------------------------
-export const isPasswordStrong = (password) => {
-  return (
-    password.length >= 8 &&
-    /[A-Z]/.test(password) &&
-    /[a-z]/.test(password) &&
-    /[0-9]/.test(password) &&
-    /[!@#$%^&*(),.?\":{}|<>]/.test(password)
-  );
+const isPasswordStrong = (password) => {
+  if (!password || password.length < 6) return false;
+  return true;
 };
 
 export function PasswordStrengthIndicator({ password }) {
@@ -2476,13 +3455,15 @@ export function SettingsView({ state, navigateTo, openModal, closeModal, setModa
             </div>
           )}
 
-          <div className="settings-item" onClick={() => navigateTo('#settings/notifications')} style={{ cursor: 'pointer' }}>
-            <div className="settings-item-left">
-              <Icons.Bell />
-              <span className="settings-title">Notification Preferences</span>
+          {user.role !== "Employee" && (
+            <div className="settings-item" onClick={() => navigateTo('#settings/notifications')} style={{ cursor: 'pointer' }}>
+              <div className="settings-item-left">
+                <Icons.Bell />
+                <span className="settings-title">Notification Preferences</span>
+              </div>
+              <Icons.ChevronRight />
             </div>
-            <Icons.ChevronRight />
-          </div>
+          )}
 
           {showLogs && (
             <div className="settings-item" onClick={() => navigateTo('#settings/logs')} style={{ cursor: 'pointer' }}>
@@ -2756,11 +3737,12 @@ export function NotificationPreferencesView({ state, navigateTo }) {
 }
 
 // ----------------------------------------------------
-// 10. AUDIT TRAIL LOGS VIEW COMPONENT
+// 10. AUDIT TRAIL LOGS VIEW COMPONENT (WITH BULK DELETE)
 // ----------------------------------------------------
-export function AuditLogsView({ state, navigateTo }) {
+export function AuditLogsView({ state, navigateTo, openModal, closeModal, setModalContent }) {
   const [logs, setLogs] = useState(state.logs);
   const [query, setQuery] = useState("");
+  const [selectedIndices, setSelectedIndices] = useState(new Set());
 
   useEffect(() => {
     const q = query.toLowerCase();
@@ -2770,12 +3752,31 @@ export function AuditLogsView({ state, navigateTo }) {
       (log.details && log.details.toLowerCase().includes(q))
     );
     setLogs(filtered);
+    setSelectedIndices(new Set());
   }, [query, state.logs]);
+
+  const toggleSelect = (idx) => {
+    const next = new Set(selectedIndices);
+    if (next.has(idx)) {
+      next.delete(idx);
+    } else {
+      next.add(idx);
+    }
+    setSelectedIndices(next);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIndices.size === logs.length && logs.length > 0) {
+      setSelectedIndices(new Set());
+    } else {
+      const all = new Set(logs.map((_, idx) => idx));
+      setSelectedIndices(all);
+    }
+  };
 
   const handleExport = () => {
     let csvContent = "Timestamp,User,Role,Action,Previous Value,Updated Value,Details\n";
 
-    // Export current filtered search results
     logs.forEach(log => {
       const row = [
         log.timestamp,
@@ -2789,7 +3790,6 @@ export function AuditLogsView({ state, navigateTo }) {
       csvContent += row + "\n";
     });
 
-    // Create Blob with UTF-8 BOM for universal mobile and desktop compatibility
     const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
 
@@ -2803,6 +3803,56 @@ export function AuditLogsView({ state, navigateTo }) {
     URL.revokeObjectURL(url);
   };
 
+  // Requirement 15: Bulk Delete Selected Logs with Confirmation Dialog
+  const handleBulkDelete = () => {
+    if (selectedIndices.size === 0) return;
+
+    const count = selectedIndices.size;
+    const confirmContent = (
+      <div style={{ textAlign: 'left', fontFamily: 'var(--font-family)' }}>
+        <p style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text-main)', marginBottom: '12px' }}>
+          Delete {count} selected log{count > 1 ? 's' : ''}?
+        </p>
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.4', marginBottom: '20px' }}>
+          Are you sure you want to permanently delete the selected audit trail entries? This action cannot be undone.
+        </p>
+
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button 
+            type="button" 
+            className="btn-dark" 
+            style={{ flex: 1, backgroundColor: '#4B5563', marginBottom: 0, cursor: 'pointer' }}
+            onClick={closeModal}
+          >
+            Cancel
+          </button>
+          <button 
+            type="button" 
+            className="btn-orange" 
+            style={{ flex: 1.5, backgroundColor: 'var(--status-red)', borderColor: 'var(--status-red)', cursor: 'pointer' }}
+            onClick={() => {
+              const logsToDelete = logs.filter((_, idx) => selectedIndices.has(idx));
+              const remainingLogs = state.logs.filter(log => !logsToDelete.includes(log));
+              
+              localStorage.setItem("pms_logs", JSON.stringify(remainingLogs));
+              state.setLogs(remainingLogs);
+              setSelectedIndices(new Set());
+              closeModal();
+              state.showToast("Logs Deleted", `Successfully removed ${count} log entry(s).`, "success");
+            }}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    );
+
+    setModalContent(confirmContent, "Confirm Deletion");
+    openModal();
+  };
+
+  const isMainAdmin = state.currentUser.role === "Main Admin";
+
   return (
     <div>
       <header className="app-header">
@@ -2812,34 +3862,98 @@ export function AuditLogsView({ state, navigateTo }) {
           </button>
           <h1 style={{ fontSize: '18px' }}>Audit Trail Logs</h1>
         </div>
-        <div className="header-right">
+        <div className="header-right" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {isMainAdmin && selectedIndices.size > 0 && (
+            <button 
+              className="btn-orange" 
+              style={{ 
+                padding: '6px 12px', 
+                fontSize: '11px', 
+                cursor: 'pointer', 
+                backgroundColor: 'var(--status-red)', 
+                borderColor: 'var(--status-red)',
+                color: '#ffffff',
+                fontWeight: '800'
+              }} 
+              onClick={handleBulkDelete}
+            >
+              Delete Selected ({selectedIndices.size})
+            </button>
+          )}
           <button className="btn-orange" style={{ padding: '6px 12px', fontSize: '11px', cursor: 'pointer' }} onClick={handleExport}>Export CSV</button>
         </div>
       </header>
 
       <div style={{ paddingTop: '10px' }}>
         <div className="form-group">
-          <input type="text" className="form-control" placeholder="Search logs..." value={query} onChange={e => setQuery(e.target.value)} style={{ cursor: 'text' }} />
+          <input type="text" className="form-control" placeholder="Search logs by action, user, or details..." value={query} onChange={e => setQuery(e.target.value)} style={{ cursor: 'text' }} />
         </div>
+
+        {/* Selection Toolbar */}
+        {isMainAdmin && logs.length > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '12px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', color: 'var(--text-main)' }}>
+              <input 
+                type="checkbox" 
+                checked={selectedIndices.size === logs.length && logs.length > 0} 
+                onChange={toggleSelectAll} 
+                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+              />
+              <span>Select All ({logs.length})</span>
+            </label>
+            {selectedIndices.size > 0 && (
+              <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--primary-orange)' }}>
+                {selectedIndices.size} Selected
+              </span>
+            )}
+          </div>
+        )}
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {logs.length === 0 ? (
             <p style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>No logs found.</p>
           ) : (
             logs.map((log, idx) => {
               const timeStr = new Date(log.timestamp).toLocaleString('en-GB');
+              const isSelected = selectedIndices.has(idx);
               return (
-                <div key={idx} style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-sm)', padding: '12px', fontSize: '12px', lineHeight: '1.4', textAlign: 'left' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '10px', marginBottom: '4px' }}>
-                    <span>{timeStr}</span>
-                    <b>{log.userName} ({log.role})</b>
-                  </div>
-                  <div><b>Action:</b> {log.action}</div>
-                  {log.previousValue !== "None" || log.updatedValue !== "None" ? (
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      {log.previousValue} &rarr; {log.updatedValue}
+                <div 
+                  key={idx} 
+                  style={{ 
+                    background: isSelected ? '#fef3c7' : 'var(--card-bg)', 
+                    border: isSelected ? '1.5px solid var(--primary-orange)' : '1px solid var(--border-color)', 
+                    borderRadius: 'var(--border-radius-sm)', 
+                    padding: '12px', 
+                    fontSize: '12px', 
+                    lineHeight: '1.4', 
+                    textAlign: 'left',
+                    display: 'flex',
+                    gap: '12px',
+                    alignItems: 'flex-start',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  {isMainAdmin && (
+                    <input 
+                      type="checkbox" 
+                      checked={isSelected} 
+                      onChange={() => toggleSelect(idx)} 
+                      style={{ marginTop: '2px', width: '16px', height: '16px', cursor: 'pointer' }}
+                    />
+                  )}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '10px', marginBottom: '4px' }}>
+                      <span>{timeStr}</span>
+                      <b>{log.userName} ({log.role})</b>
                     </div>
-                  ) : null}
-                  {log.details && <div style={{ fontSize: '11px', background: 'var(--bg-cream)', padding: '4px 8px', borderRadius: '4px', marginTop: '6px', color: '#555' }}>{log.details}</div>}
+                    <div><b>Action:</b> {log.action}</div>
+                    {log.previousValue !== "None" || log.updatedValue !== "None" ? (
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        {log.previousValue} &rarr; {log.updatedValue}
+                      </div>
+                    ) : null}
+                    {log.details && <div style={{ fontSize: '11px', background: 'var(--bg-cream)', padding: '4px 8px', borderRadius: '4px', marginTop: '6px', color: '#555' }}>{log.details}</div>}
+                  </div>
                 </div>
               );
             })
@@ -2857,21 +3971,33 @@ export function OrderHistoryView({ state, navigateTo }) {
   const user = state.currentUser;
   const isEmployee = user.role === "Employee";
 
+  const [searchQuery, setSearchQuery] = useState("");
+
   const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
   const isWithin14Days = (dateIso) => {
     if (!dateIso) return true;
     return (new Date() - new Date(dateIso)) <= fourteenDaysMs;
   };
 
-  const filteredRequests = state.requests.filter(r => {
+  let filteredRequests = state.requests.filter(r => {
     if (isEmployee && r.employeeName !== user.name) return false;
     
     // Include Received if more than 14 days ago
     if (r.status === "Received" && !isWithin14Days(r.actualDeliveryDate)) {
       return true;
     }
-    return r.status === "Rejected" || r.status === "Cancelled";
+    return r.status === "Rejected";
   });
+
+  // Apply Smart Search
+  if (searchQuery.trim()) {
+    const kws = searchQuery.toLowerCase().split(/\s+/).filter(k => k.trim());
+    filteredRequests = filteredRequests.filter(r => {
+      const prodName = (r.productName || "").toLowerCase();
+      const desc = (r.description || "").toLowerCase();
+      return kws.every(kw => prodName.includes(kw) || desc.includes(kw));
+    });
+  }
 
   const sorted = [...filteredRequests].sort((a, b) => {
     return new Date(b.date) - new Date(a.date);
@@ -2894,9 +4020,43 @@ export function OrderHistoryView({ state, navigateTo }) {
       </header>
 
       <div style={{ paddingTop: '10px' }}>
+        {/* Smart Search Bar */}
+        <div style={{ marginBottom: '16px', position: 'relative' }}>
+          <input 
+            type="text" 
+            className="form-control" 
+            placeholder="Search by product name or description..." 
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            style={{ 
+              paddingLeft: '38px', 
+              borderRadius: '12px', 
+              height: '42px', 
+              fontSize: '13px', 
+              cursor: 'text',
+              border: '1px solid var(--border-color)',
+              boxShadow: 'var(--shadow-sm)'
+            }}
+          />
+          <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </div>
+          {searchQuery && (
+            <button 
+              onClick={() => setSearchQuery("")}
+              style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
         {sorted.length === 0 ? (
           <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            No completed history found.
+            {searchQuery.trim() ? "No matching orders found." : "No completed history found."}
           </div>
         ) : (
           sorted.map(req => {
@@ -2928,6 +4088,177 @@ export function OrderHistoryView({ state, navigateTo }) {
 }
 
 // ----------------------------------------------------
+// 11b. REJECTED ORDERS VIEW COMPONENT
+// ----------------------------------------------------
+export function RejectedOrdersView({ state, navigateTo }) {
+  const user = state.currentUser;
+  const isEmployee = user.role === "Employee";
+
+  const [searchQuery, setSearchQuery] = useState("");
+
+  let filteredRequests = state.requests.filter(r => {
+    if (r.status !== "Rejected") return false;
+    if (r.deletedByUserIds && r.deletedByUserIds.includes(user.id)) return false;
+    return true;
+  });
+
+  // Apply Smart Search
+  if (searchQuery.trim()) {
+    const kws = searchQuery.toLowerCase().split(/\s+/).filter(k => k.trim());
+    filteredRequests = filteredRequests.filter(r => {
+      const prodName = (r.productName || "").toLowerCase();
+      const desc = (r.description || "").toLowerCase();
+      return kws.every(kw => prodName.includes(kw) || desc.includes(kw));
+    });
+  }
+
+  const sorted = [...filteredRequests].sort((a, b) => {
+    return new Date(b.date) - new Date(a.date);
+  });
+
+  const handleDelete = async (e, req) => {
+    e.stopPropagation();
+    const confirmDelete = window.confirm("Are you sure you want to remove this rejected order from your view? This action cannot be undone.");
+    if (!confirmDelete) return;
+
+    try {
+      const updatedReq = {
+        ...req,
+        deletedByUserIds: [...(req.deletedByUserIds || []), user.id]
+      };
+      const saved = await apiService.updateRequest(req.id, updatedReq);
+      state.setRequests(state.requests.map(r => r.id === req.id ? saved : r));
+      state.logEvent("Removed Rejected Order Card", "None", "None", `Employee removed rejected order ${req.id} from their view.`);
+      state.showToast("Success", "Removed from your view successfully.", "success");
+    } catch (err) {
+      state.showToast("Error", err.message || "Failed to remove order.", "success");
+    }
+  };
+
+  return (
+    <div>
+      <header className="app-header">
+        <div className="header-left">
+          <button className="back-btn" onClick={() => navigateTo('#home')} style={{ cursor: 'pointer' }}>
+            <Icons.Back />
+          </button>
+          <h1 style={{ fontSize: '20px' }}>Rejected orders</h1>
+        </div>
+        <div className="header-right">
+          <div style={{ background: '#f8d7da', fontSize: '12px', fontWeight: '800', padding: '4px 8px', borderRadius: '4px', color: '#721c24' }}>
+            {filteredRequests.length}
+          </div>
+        </div>
+      </header>
+
+      <div style={{ paddingTop: '10px' }}>
+        {/* Smart Search Bar */}
+        <div style={{ marginBottom: '16px', position: 'relative' }}>
+          <input 
+            type="text" 
+            className="form-control" 
+            placeholder="Search by product name or description..." 
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            style={{ 
+              paddingLeft: '38px', 
+              borderRadius: '12px', 
+              height: '42px', 
+              fontSize: '13px', 
+              cursor: 'text',
+              border: '1px solid var(--border-color)',
+              boxShadow: 'var(--shadow-sm)'
+            }}
+          />
+          <div style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </div>
+          {searchQuery && (
+            <button 
+              onClick={() => setSearchQuery("")}
+              style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        {sorted.length === 0 ? (
+          <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+            {searchQuery.trim() ? "No matching orders found." : "No rejected orders found."}
+          </div>
+        ) : (
+          sorted.map(req => {
+            const rejectedByItem = req.history?.find(h => h.status === "Rejected") || {};
+            const rejectedBy = rejectedByItem.updatedBy || "Admin";
+            const rejectionReason = rejectedByItem.remarks || "No reason specified.";
+            const rejectionTime = rejectedByItem.timestamp 
+              ? new Date(rejectedByItem.timestamp).toLocaleString('en-GB') 
+              : new Date(req.date).toLocaleString('en-GB');
+
+            return (
+              <div key={req.id} className="live-order-card" style={{ padding: '16px', position: 'relative' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '700' }}>{req.id}</span>
+                  {isEmployee && (
+                    <button 
+                      onClick={(e) => handleDelete(e, req)}
+                      style={{ 
+                        background: 'none', 
+                        border: 'none', 
+                        color: 'var(--status-red)', 
+                        cursor: 'pointer', 
+                        padding: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: '4px',
+                        transition: 'background-color 0.2s'
+                      }}
+                      title="Remove from my view"
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                    >
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                      </svg>
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ marginBottom: '12px', textAlign: 'left' }}>
+                  <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text-main)' }}>
+                    {req.productName}
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    Qty: <b>{req.qty} {req.units}</b> • Requested by: <b>{req.employeeName}</b>
+                  </div>
+                </div>
+
+                <div style={{ background: '#fff5f5', borderLeft: '3px solid var(--status-red)', padding: '10px 12px', borderRadius: '4px', fontSize: '13px', textAlign: 'left', marginBottom: '10px' }}>
+                  <div style={{ fontWeight: '700', color: '#c53030', marginBottom: '4px', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Rejected By {rejectedBy} • {rejectionTime}
+                  </div>
+                  <div style={{ color: '#742a2a', fontStyle: 'italic', lineHeight: '1.4' }}>
+                    &ldquo;{rejectionReason}&rdquo;
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------
 // 12. LOGIN VIEW COMPONENT
 // ----------------------------------------------------
 export function LoginView({ onLogin }) {
@@ -2938,20 +4269,26 @@ export function LoginView({ onLogin }) {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [errorKey, setErrorKey] = useState(0);
 
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
-    if (!username || !password) {
+    const cleanUsername = (username || "").trim();
+    const cleanPassword = (password || "").trim();
+    if (!cleanUsername || !cleanPassword) {
       setError("Please fill in both fields.");
+      setErrorKey(prev => prev + 1);
       return;
     }
     setLoading(true);
     setError("");
     try {
-      const user = await apiService.authenticate(username, password);
+      const user = await apiService.authenticate(cleanUsername, cleanPassword);
       onLogin(user);
     } catch (err) {
-      setError(err.message || "Invalid username or password");
+      const errMsg = err.message || "Invalid username or password";
+      setError(errMsg);
+      setErrorKey(prev => prev + 1);
     } finally {
       setLoading(false);
     }
@@ -2966,7 +4303,7 @@ export function LoginView({ onLogin }) {
 
       <div style={{ background: 'var(--card-bg)', border: '1.5px solid var(--border-color)', borderRadius: 'var(--border-radius-lg)', padding: '24px', boxShadow: 'var(--shadow-md)' }}>
         {error && (
-          <div style={{ background: '#fef2f2', border: '1px solid #fee2e2', color: '#ef4444', padding: '10px 14px', borderRadius: '8px', fontSize: '12px', marginBottom: '16px', textAlign: 'left' }}>
+          <div key={errorKey} className="login-error-banner">
             ⚠️ {error}
           </div>
         )}
@@ -3163,6 +4500,7 @@ export function UserManagementView({ state, navigateTo, openModal, closeModal, s
   const [department, setDepartment] = useState("Kraft Mill");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
   const [permissions, setPermissions] = useState({
     approve_requests: false,
     manage_suppliers: false,
@@ -3280,24 +4618,35 @@ export function UserManagementView({ state, navigateTo, openModal, closeModal, s
     }
 
     try {
+      const cleanName = (name || "").trim();
+      const cleanEmail = (email || "").trim();
+      const cleanPhone = (phone || "").trim();
+      const cleanUsername = (username || "").trim();
+      const cleanPassword = (password || "").trim();
+
       if (editUser) {
         // Edit User
         const updated = {
           ...editUser,
-          name,
+          name: cleanName,
           role,
           department,
-          email,
-          phone,
+          email: cleanEmail,
+          phone: cleanPhone,
           permissions: role === "Sub Admin" ? permissions : {}
         };
+        if (cleanPassword) {
+          const newHash = await apiService.hashPassword(cleanPassword);
+          updated.passwordHash = newHash;
+          updated.mustChangePassword = true;
+        }
         await apiService.saveUser(updated);
-        state.logEvent("Edited User Account", editUser.username, username, `Main Admin updated user settings for ${username}.`);
+        state.logEvent("Edited User Account", editUser.username, cleanUsername, `Main Admin updated user settings for ${cleanUsername}.`);
         
         setModalContent(
           <div style={{ textAlign: 'center' }}>
             <p style={{ color: 'var(--status-green)', fontWeight: 'bold' }}>✓ Success</p>
-            <p>User details updated successfully.</p>
+            <p>User details updated successfully.{cleanPassword ? " The password was updated." : ""}</p>
             <button className="btn-dark" onClick={closeModal} style={{ cursor: 'pointer' }}>Close</button>
           </div>,
           "User Updated"
@@ -3307,16 +4656,16 @@ export function UserManagementView({ state, navigateTo, openModal, closeModal, s
         // Create User
         const newUser = {
           id: `usr-${Date.now()}`,
-          username,
-          name,
+          username: cleanUsername,
+          name: cleanName,
           role,
           department,
-          email,
-          phone,
+          email: cleanEmail,
+          phone: cleanPhone,
           disabled: false,
           permissions: role === "Sub Admin" ? permissions : {}
         };
-        const tempPassword = await apiService.createUser(newUser);
+        const tempPassword = await apiService.createUser(newUser, cleanPassword);
         
         // Show in-app modal instead of browser alert()
         setModalContent(
@@ -3348,6 +4697,7 @@ export function UserManagementView({ state, navigateTo, openModal, closeModal, s
       setName("");
       setEmail("");
       setPhone("");
+      setPassword("");
       setRole("Employee");
       setDepartment(activeDepts.length > 0 ? activeDepts[0].name : "");
       setPermissions({
@@ -3379,6 +4729,7 @@ export function UserManagementView({ state, navigateTo, openModal, closeModal, s
     setDepartment(u.department || (activeDepts.length > 0 ? activeDepts[0].name : ""));
     setEmail(u.email || "");
     setPhone(u.phone || "");
+    setPassword("");
     setPermissions(u.permissions || {
       approve_requests: false,
       manage_suppliers: false,
@@ -3411,19 +4762,34 @@ export function UserManagementView({ state, navigateTo, openModal, closeModal, s
   };
 
   const handleResetPassword = (u) => {
-    let customPassword = "";
+    const defaultPass = `alagiri${u.username.toLowerCase()}`;
 
     const handleConfirmReset = async () => {
-      if (!customPassword.trim()) {
-        state.showToast("Validation Error", "Please enter a valid password.", "success");
-        return;
-      }
+      const inputEl = document.getElementById("reset-pass-input");
+      const customPassword = inputEl ? inputEl.value : "";
+      const finalPassword = customPassword.trim() || defaultPass;
       try {
-        await apiService.resetUserPassword(u.id, customPassword);
+        const generated = await apiService.resetUserPassword(u.id, finalPassword);
         state.logEvent("Reset User Password", u.username, u.username, `Main Admin reset password for ${u.username}.`);
         
-        state.showToast("Success", `Password for ${u.name} has been reset successfully. They will be required to change it on their next login.`, "success");
-        closeModal();
+        loadUsersAndDepts();
+        
+        setModalContent(
+          <div style={{ textAlign: 'left' }}>
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
+              <h4 style={{ color: '#16a34a', margin: 0, fontSize: '15px', fontWeight: 'bold' }}>✓ Password Reset Successfully</h4>
+            </div>
+            <p style={{ fontSize: '13px', lineHeight: '1.5', color: 'var(--text-main)' }}>
+              The password for <b>{u.name}</b> has been reset successfully. They will be required to change it on their next login.
+            </p>
+            <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '14px', margin: '14px 0' }}>
+              <div style={{ marginBottom: '8px' }}><b>Username:</b> {u.username}</div>
+              <div style={{ marginBottom: '8px' }}><b>Temporary Password:</b> <code style={{ fontSize: '14px', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', color: '#dc2626', fontWeight: 'bold' }}>{generated}</code></div>
+            </div>
+            <button className="btn-dark" onClick={closeModal} style={{ width: '100%', cursor: 'pointer' }}>Close</button>
+          </div>,
+          "Password Reset Success"
+        );
       } catch (err) {
         state.showToast("Error", err.message || "Failed to reset password.", "success");
       }
@@ -3437,17 +4803,18 @@ export function UserManagementView({ state, navigateTo, openModal, closeModal, s
         <div className="form-group" style={{ marginBottom: '16px' }}>
           <label>New Password</label>
           <input 
+            id="reset-pass-input"
             type="text" 
             className="form-control" 
-            placeholder="Enter custom password..." 
-            onChange={e => { customPassword = e.target.value; }} 
+            defaultValue=""
+            placeholder="Enter new custom password..." 
             style={{ cursor: 'text' }}
           />
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
           <button 
             className="btn-dark" 
-            style={{ flex: 1, backgroundColor: '#9ca3af', marginBottom: 0, cursor: 'pointer' }} 
+            style={{ flex: 1, backgroundColor: '#4B5563', marginBottom: 0, cursor: 'pointer' }} 
             onClick={closeModal}
           >
             Cancel
@@ -3471,7 +4838,7 @@ export function UserManagementView({ state, navigateTo, openModal, closeModal, s
       <form onSubmit={handleSave}>
         <div className="form-group">
           <label>Username</label>
-          <input type="text" className="form-control" value={username} onChange={e => setUsername(e.target.value)} disabled={!!editUser} required style={{ cursor: editUser ? 'not-allowed' : 'text', border: errors.username ? '1.5px solid var(--status-red)' : '1px solid var(--border-color)' }} />
+          <input type="text" className="form-control" value={username} onChange={e => setUsername(e.target.value)} disabled={!!editUser} required autoComplete="new-username" style={{ cursor: editUser ? 'not-allowed' : 'text', border: errors.username ? '1.5px solid var(--status-red)' : '1px solid var(--border-color)' }} />
           {errors.username && <div style={{ color: 'var(--status-red)', fontSize: '11px', marginTop: '4px', textAlign: 'left' }}>{errors.username}</div>}
         </div>
 
@@ -3492,6 +4859,21 @@ export function UserManagementView({ state, navigateTo, openModal, closeModal, s
           <input type="tel" className="form-control" placeholder="e.g. 9876543210 or +919876543210" value={phone} onChange={e => { setPhone(e.target.value); validateUserField("phone", e.target.value); }} required style={{ cursor: 'text', border: errors.phone ? '1.5px solid var(--status-red)' : '1px solid var(--border-color)' }} />
           {errors.phone && <div style={{ color: 'var(--status-red)', fontSize: '11px', marginTop: '4px', textAlign: 'left' }}>{errors.phone}</div>}
         </div>
+
+        {!editUser && (
+          <div className="form-group">
+            <label>Password (Optional)</label>
+            <input 
+              type="password" 
+              className="form-control" 
+              placeholder="Leave blank for default (alagiri + username)" 
+              value={password} 
+              onChange={e => setPassword(e.target.value)} 
+              autoComplete="new-password"
+              style={{ cursor: 'text' }} 
+            />
+          </div>
+        )}
 
         <div className="form-row">
           <div className="form-group">
@@ -3536,7 +4918,7 @@ export function UserManagementView({ state, navigateTo, openModal, closeModal, s
         )}
 
         <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
-          <button type="button" className="btn-dark" style={{ flex: 1, backgroundColor: '#9ca3af', marginBottom: 0 }} onClick={() => { setShowAddForm(false); setEditUser(null); }}>Cancel</button>
+          <button type="button" className="btn-dark" style={{ flex: 1, backgroundColor: '#4B5563', marginBottom: 0 }} onClick={() => { setShowAddForm(false); setEditUser(null); }}>Cancel</button>
           <button type="submit" className="btn-orange" style={{ flex: 1.5 }}>Save Account</button>
         </div>
       </form>
@@ -3601,12 +4983,12 @@ export function UserManagementView({ state, navigateTo, openModal, closeModal, s
                     </div>
                     <div style={{ display: 'flex', gap: '8px', flexShrink: 0, alignItems: 'center' }}>
                       <button 
-                        className="btn-outlined-icon-edit"
+                        className="btn-outlined-icon-dark"
                         onClick={() => handleEdit(u)} 
                         style={{ 
                           backgroundColor: 'transparent', 
-                          color: 'var(--primary-orange)', 
-                          border: '1px solid var(--primary-orange)', 
+                          color: 'var(--dark-charcoal)', 
+                          border: '1px solid var(--dark-charcoal)', 
                           borderRadius: '6px', 
                           padding: '4px 8px', 
                           fontSize: '11px', 
@@ -3649,27 +5031,28 @@ export function UserManagementView({ state, navigateTo, openModal, closeModal, s
                         </button>
                       )}
                       <button 
-                        className="btn-outlined-icon-key"
                         onClick={() => handleResetPassword(u)} 
                         style={{ 
-                          backgroundColor: 'transparent', 
-                          color: 'var(--text-main)', 
-                          border: '1px solid var(--text-main)', 
+                          backgroundColor: '#0D6EFD', 
+                          color: '#FFFFFF', 
+                          border: 'none', 
                           borderRadius: '6px', 
-                          padding: '4px 8px', 
+                          padding: '4px 12px', 
                           fontSize: '11px', 
                           fontWeight: '700', 
                           cursor: 'pointer', 
                           display: 'inline-flex', 
                           alignItems: 'center', 
-                          gap: '4px', 
+                          justifyContent: 'center',
                           height: '26px', 
+                          boxSizing: 'border-box',
                           transition: 'all 0.2s' 
                         }}
                         title="Reset Password"
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0b5ed7'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0D6EFD'}
                       >
-                        <Icons.Key />
-                        <span>Reset Pass</span>
+                        <span>Reset Password</span>
                       </button>
                     </div>
                   </div>
@@ -3712,7 +5095,7 @@ export function UserAvatar({ user, size = 40 }) {
   if (user.role === "Main Admin") {
     bgColor = "#7c3aed"; // purple
   } else if (user.role === "Sub Admin") {
-    bgColor = "#2563eb"; // blue
+    bgColor = "#4F46E5"; // indigo
   } else if (user.role === "Employee") {
     bgColor = "#0d9488"; // teal
   }
@@ -3796,7 +5179,7 @@ export function AvatarEditor({ user, onSave, onClose }) {
       </div>
 
       <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
-        <button className="btn-dark" style={{ flex: 1, backgroundColor: '#9ca3af', marginBottom: 0, cursor: 'pointer' }} onClick={onClose}>Cancel</button>
+        <button className="btn-dark" style={{ flex: 1, backgroundColor: '#4B5563', marginBottom: 0, cursor: 'pointer' }} onClick={onClose}>Cancel</button>
         <button className="btn-orange" style={{ flex: 1.5, cursor: 'pointer' }} onClick={handleSave}>Save Changes</button>
       </div>
     </div>
