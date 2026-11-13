@@ -6,8 +6,8 @@
       .\scripts\update-server-env.ps1
       .\scripts\update-server-env.ps1 -EnvFile 'C:\path\to\env2'
 
-  Only these keys are copied: META_*, PUBLIC_BASE_URL, MORNING_JOB_CRON,
-  WHATSAPP_DRY_RUN, WHATSAPP_AVAILABILITY_ENABLED.
+  Only these keys are copied: META_*, WHATSAPP_*, PUBLIC_BASE_URL, MORNING_JOB_CRON,
+  DAILY_SUMMARY_RECIPIENTS, REMIND_AFTER_BOOKED, CATCH_UP_ON_START, ALLOW_TEST_ORDERS.
   Everything else on the server (JWT_SECRET, CORS_ORIGIN, DB_PATH, S3...) is
   left exactly as it is. A dated backup of /etc/millmate.env is kept.
 
@@ -26,7 +26,7 @@ $SecurityGroup = 'sg-0045e793bab28ba16'
 if (-not (Test-Path $EnvFile)) { Write-Host "Env file not found: $EnvFile" -ForegroundColor Red; exit 1 }
 
 # ---- Pick the allowed keys from the file ----
-$allowed = '^(META_[A-Z0-9_]+|PUBLIC_BASE_URL|MORNING_JOB_CRON|WHATSAPP_DRY_RUN|WHATSAPP_AVAILABILITY_ENABLED)$'
+$allowed = '^(META_[A-Z0-9_]+|PUBLIC_BASE_URL|MORNING_JOB_CRON|WHATSAPP_[A-Z0-9_]+|DAILY_SUMMARY_RECIPIENTS|REMIND_AFTER_BOOKED|CATCH_UP_ON_START|ALLOW_TEST_ORDERS)$'
 $pairs = [ordered]@{}
 foreach ($line in Get-Content $EnvFile) {
   $t = $line.Trim()

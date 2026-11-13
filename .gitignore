@@ -40,4 +40,5 @@ server/data/uploads/
 
 # Secret env files kept outside git
 env2
+env[0-9]*
 *.env.local
