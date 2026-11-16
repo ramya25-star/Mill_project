@@ -443,7 +443,7 @@ const handleIncomingMessage = async (message, toPhoneNumber) => {
       withTransaction(() => {
         db.prepare(`
           UPDATE requests
-          SET status = ?, dispatch_date = ?, reminders_sent = 0, data = ?, updated_at = datetime('now')
+          SET status = ?, dispatch_date = ?, reminders_sent = 0, needs_call = 0, data = ?, updated_at = datetime('now')
           WHERE id = ?
         `).run(newStatus, cleanDate, JSON.stringify(orderData), orderRow.id);
 

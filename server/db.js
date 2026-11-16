@@ -169,6 +169,10 @@ ensureColumn('requests', 'lr_received_at', 'TEXT');
 ensureColumn('requests', 'last_reminder_date', 'TEXT');
 ensureColumn('requests', 'reminders_sent', 'INTEGER DEFAULT 0');
 ensureColumn('requests', 'needs_call', 'INTEGER DEFAULT 0');
+// Overdue reminders are capped per dispatch date: the count belongs to
+// overdue_for_date, so a new date from the supplier starts again at 0.
+ensureColumn('requests', 'overdue_reminders_sent', 'INTEGER DEFAULT 0');
+ensureColumn('requests', 'overdue_for_date', 'TEXT');
 
 // whatsapp_messages columns
 ensureColumn('whatsapp_messages', 'direction', 'TEXT');

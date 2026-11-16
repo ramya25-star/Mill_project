@@ -419,7 +419,17 @@ export const sendOverdue = async (orderOrId, { trigger = 'overdue_reminder' } = 
     body: `Overdue dispatch reminder sent for ${poNumber}`,
     trigger
   });
-  db.prepare("UPDATE requests SET last_reminder_date = datetime('now'), updated_at = datetime('now') WHERE id = ?").run(order.id);
+  // Count this reminder against the dispatch date it is chasing (a different
+  // date than last time restarts the count at 1).
+  const forDate = order.dispatch_date || order.expectedDispatchDate || order.data?.expectedDispatchDate || null;
+  db.prepare(`
+    UPDATE requests
+    SET last_reminder_date = datetime('now'),
+        overdue_reminders_sent = CASE WHEN overdue_for_date IS ? THEN coalesce(overdue_reminders_sent, 0) + 1 ELSE 1 END,
+        overdue_for_date = ?,
+        updated_at = datetime('now')
+    WHERE id = ?
+  `).run(forDate, forDate, order.id);
   return { wamid, poNumber };
 };
 

@@ -1097,6 +1097,43 @@ async function run() {
       record('Test S11: Meta DatePicker & dynamic reply edge cases', false, err.message);
     }
 
+    // ------------------------------------------------------------------
+    // Test S12: Overdue reminders stop after 3 days for the same dispatch date;
+    // day 4 sends nothing, sets needs_call=1 and notifies Main AND Sub Admins once.
+    // A new dispatch date from the supplier starts a fresh count of 3.
+    // ------------------------------------------------------------------
+    try {
+      const s12 = `S12-REQ-${Date.now()}`;
+      db.prepare(`
+        INSERT INTO requests (id, status, data, po_wamid, po_sent_at, dispatch_date, reminders_sent, needs_call)
+        VALUES (?, 'Acknowledged', ?, 'wamid.s12', '2026-12-01 04:30:00', '2026-12-05', 0, 0)
+      `).run(s12, JSON.stringify({ id: s12, poNumber: 'PO-S12', supplierPhone: '+919876543210' }));
+      const overdueSent = () => db.prepare("SELECT count(*) AS c FROM whatsapp_messages WHERE order_id = ? AND trigger = 'overdue_reminder'").get(s12).c;
+      const adminNotifs = (role) => db.prepare("SELECT count(*) AS c FROM notifications WHERE role = ? AND json_extract(data, '$.requestId') = ?").get(role, s12).c;
+      const runOn = (d) => runMorningJobs({ force: false, now: new Date(`${d}T10:00:00+05:30`) });
+
+      for (const d of ['2026-12-06', '2026-12-07', '2026-12-08']) await runOn(d);
+      const afterThree = overdueSent();
+      await runOn('2026-12-09');
+      await runOn('2026-12-10');
+      const afterFive = overdueSent();
+      const flagged = db.prepare('SELECT needs_call FROM requests WHERE id = ?').get(s12).needs_call;
+      const mainN = adminNotifs('Main Admin');
+      const subN = adminNotifs('Sub Admin');
+
+      // Supplier picks a new date (same DB change the Flow reply makes), which passes
+      db.prepare("UPDATE requests SET dispatch_date = '2026-12-15', needs_call = 0 WHERE id = ?").run(s12);
+      await runOn('2026-12-16');
+      const afterNewDate = overdueSent();
+
+      const passedS12 = afterThree === 3 && afterFive === 3 && flagged === 1 && mainN === 1 && subN === 1 && afterNewDate === 4;
+      record('Test S12: Overdue reminders stop after 3 days, admins (Main + Sub) notified once, new date restarts count', passedS12,
+        passedS12 ? '' : `afterThree=${afterThree} afterFive=${afterFive} needs_call=${flagged} main=${mainN} sub=${subN} afterNewDate=${afterNewDate}`);
+      db.prepare('DELETE FROM requests WHERE id = ?').run(s12);
+    } catch (err) {
+      record('Test S12: Overdue 3-day cap', false, err.message);
+    }
+
   } finally {
     console.log('\n====================================================');
     console.log('                   Test Summary');

@@ -11,6 +11,24 @@ import {
 
 let scheduledInstance = null;
 
+// A supplier gets at most this many reminders (one a day) for a missing date, and
+// the same again once a chosen dispatch date has passed. Then they stop and the
+// admins are told to call.
+export const MAX_SUPPLIER_REMINDERS = 3;
+
+// In-app alert for every admin: notifications are shown by role, so add one for
+// Main Admins and one for Sub Admins.
+const notifyAdmins = (order, { title, body }) => {
+  for (const role of ['Main Admin', 'Sub Admin']) {
+    const notifId = `notif-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    db.prepare('INSERT INTO notifications (id, role, read, data) VALUES (?, ?, 0, ?)').run(
+      notifId,
+      role,
+      JSON.stringify({ id: notifId, role, title, body, requestId: order.id, timestamp: new Date().toISOString(), read: false })
+    );
+  }
+};
+
 // =============================================================================
 // STATUS GROUPS (SINGLE SOURCE OF TRUTH)
 // =============================================================================
@@ -314,15 +332,31 @@ export async function runMorningJobs({ force = false, now = new Date() } = {}) {
       }
     }
     // -------------------------------------------------------------------------
-    // Rule D: Overdue - dispatch_date before today (IST), send ONE overdue reminder per day
-    // Reminders continue with no maximum until status changes. reminders_sent is NOT touched.
+    // Rule D: Overdue - dispatch_date before today (IST), ONE overdue reminder per day,
+    // at most MAX_SUPPLIER_REMINDERS per dispatch date. After that: needs_call=1 and all
+    // admins are notified. A new date from the supplier starts a fresh count.
     // -------------------------------------------------------------------------
     else if (dispatchDate && dispatchDate < todayStr) {
-      try {
-        await sendOverdue(order, { trigger: 'overdue_reminder' });
-        remindersSent++;
-      } catch (err) {
-        console.error(`[Morning Jobs] Error sending overdue reminder for order ${order.id}:`, err?.message || err);
+      const overdueCount = order.overdue_for_date === dispatchDate ? Number(order.overdue_reminders_sent || 0) : 0;
+      if (overdueCount >= MAX_SUPPLIER_REMINDERS) {
+        if (!order.needs_call) {
+          db.prepare("UPDATE requests SET needs_call = 1, updated_at = datetime('now') WHERE id = ?").run(order.id);
+          notifyAdmins(order, {
+            title: 'Action Needed: Call Supplier',
+            body: `Supplier ${getSupplierNameForOrder(order)} has not responded for ${MAX_SUPPLIER_REMINDERS} days after the dispatch date (${dispatchDate}) for PO ${order.poNumber || order.id}. Reminders have stopped. Please call them.`
+          });
+          needsCallFlagged++;
+          console.log(`[Morning Jobs] Order ${order.id} got ${MAX_SUPPLIER_REMINDERS} overdue reminders for ${dispatchDate} with no response. Stopped reminders, set needs_call=1, notified admins.`);
+        } else {
+          console.log(`[Morning Jobs] Skipping order ${order.id}: ${MAX_SUPPLIER_REMINDERS} overdue reminders already sent for ${dispatchDate}.`);
+        }
+      } else {
+        try {
+          await sendOverdue(order, { trigger: 'overdue_reminder' });
+          remindersSent++;
+        } catch (err) {
+          console.error(`[Morning Jobs] Error sending overdue reminder for order ${order.id}:`, err?.message || err);
+        }
       }
     }
     // -------------------------------------------------------------------------
@@ -339,25 +373,15 @@ export async function runMorningJobs({ force = false, now = new Date() } = {}) {
       }
 
       const count = Number(order.reminders_sent || 0);
-      if (count >= 3) {
+      if (count >= MAX_SUPPLIER_REMINDERS) {
         if (!order.needs_call) {
           db.prepare("UPDATE requests SET needs_call = 1, updated_at = datetime('now') WHERE id = ?").run(order.id);
-          const notifId = `notif-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-          const supplierName = getSupplierNameForOrder(order);
-          db.prepare("INSERT INTO notifications (id, role, read, data) VALUES (?, 'Main Admin', 0, ?)").run(
-            notifId,
-            JSON.stringify({
-              id: notifId,
-              role: 'Main Admin',
-              title: 'Action Needed: Call Supplier',
-              body: `Supplier ${supplierName} hasn't selected a dispatch date for PO ${order.poNumber || order.id} after 3 reminders. Please call them.`,
-              requestId: order.id,
-              timestamp: new Date().toISOString(),
-              read: false
-            })
-          );
+          notifyAdmins(order, {
+            title: 'Action Needed: Call Supplier',
+            body: `Supplier ${getSupplierNameForOrder(order)} has not selected a dispatch date for PO ${order.poNumber || order.id} after ${MAX_SUPPLIER_REMINDERS} days of reminders. Reminders have stopped. Please call them.`
+          });
           needsCallFlagged++;
-          console.log(`[Morning Jobs] Order ${order.id} reached 3 reminders without dispatch date. Set needs_call=1 and notified admin.`);
+          console.log(`[Morning Jobs] Order ${order.id} reached ${MAX_SUPPLIER_REMINDERS} reminders without dispatch date. Set needs_call=1 and notified admins.`);
         }
       } else {
         const reminderNum = count + 1;
