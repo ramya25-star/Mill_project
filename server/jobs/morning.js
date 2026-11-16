@@ -191,7 +191,27 @@ export async function runMorningJobs({ force = false, now = new Date() } = {}) {
     if (dispatchDate && dispatchDate < todayStr && !inTransit && !isDone) overdueCount++;
   }
 
+  // The daily_summary template's lines are the app's Live Orders tabs (No Response,
+  // Acknowledged, Booked, Received, Delayed), so count them exactly as the app does
+  // (HomeView in src/components/Views.jsx): by status, Received only for the last 14 days.
+  const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
+  const countStatus = (s) => orders.filter(o => (o.status || o.data?.status) === s).length;
+  const receivedRecently = orders.filter(o => {
+    if ((o.status || o.data?.status) !== 'Received') return false;
+    const delivered = o.actualDeliveryDate || o.data?.actualDeliveryDate;
+    if (!delivered) return true; // the app shows these too
+    const t = new Date(delivered).getTime();
+    return isNaN(t) || now.getTime() - t <= FOURTEEN_DAYS_MS;
+  }).length;
+
   const summaryStats = {
+    // What the WhatsApp summary shows (same as the app's tabs)
+    noResponse: countStatus('No Response'),
+    acknowledged: countStatus('Acknowledged'),
+    bookedStatus: countStatus('Booked'),
+    received: receivedRecently,
+    delayed: countStatus('Delayed'),
+    // Older internal counts, kept for the server log
     live: liveCount,
     awaitingDate: awaitingDateCount,
     booked: bookedCount,

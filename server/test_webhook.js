@@ -102,6 +102,7 @@ async function run() {
     console.log(`\n--- Template 5: Daily Orders Summary (META_SUMMARY_TEMPLATE_NAME) ---`);
     console.log(`[Config] Name: ${process.env.META_SUMMARY_TEMPLATE_NAME} | Language: ${langCode}`);
     await sendDailySummary('919876543210', 'Johnson', {
+      noResponse: 3, acknowledged: 2, bookedStatus: 1, received: 4, delayed: 1,
       live: 8,
       awaitingDate: 2,
       booked: 5,
@@ -1132,6 +1133,35 @@ async function run() {
       db.prepare('DELETE FROM requests WHERE id = ?').run(s12);
     } catch (err) {
       record('Test S12: Overdue 3-day cap', false, err.message);
+    }
+
+    // ------------------------------------------------------------------
+    // Test S13: Daily summary numbers match the app's Live Orders tabs
+    // (No Response, Acknowledged, Booked, Received in last 14 days, Delayed).
+    // ------------------------------------------------------------------
+    try {
+      const ids = [];
+      const add = (status, extra = {}) => {
+        const id = `S13-${status.replace(/\s/g, '')}-${ids.length}-${Date.now()}`;
+        ids.push(id);
+        db.prepare('INSERT INTO requests (id, status, data) VALUES (?, ?, ?)').run(id, status, JSON.stringify({ id, status, ...extra }));
+      };
+      const before = (await runMorningJobs({ force: true })).summaryStats;
+      add('No Response'); add('No Response');
+      add('Acknowledged');
+      add('Booked'); add('Booked'); add('Booked');
+      add('Received', { actualDeliveryDate: new Date().toISOString() });
+      add('Received', { actualDeliveryDate: new Date(Date.now() - 30 * 86400000).toISOString() }); // too old: not counted
+      add('Delayed'); add('Delayed');
+      add('Pending'); // a request, not a live order
+      const after = (await runMorningJobs({ force: true })).summaryStats;
+      const diff = (k) => after[k] - before[k];
+      const passedS13 = diff('noResponse') === 2 && diff('acknowledged') === 1 && diff('bookedStatus') === 3 && diff('received') === 1 && diff('delayed') === 2;
+      record('Test S13: Daily summary lines match the app tabs (No Response, Acknowledged, Booked, Received 14d, Delayed)', passedS13,
+        passedS13 ? '' : JSON.stringify({ noResponse: diff('noResponse'), acknowledged: diff('acknowledged'), booked: diff('bookedStatus'), received: diff('received'), delayed: diff('delayed') }));
+      for (const id of ids) db.prepare('DELETE FROM requests WHERE id = ?').run(id);
+    } catch (err) {
+      record('Test S13: Daily summary matches app tabs', false, err.message);
     }
 
   } finally {

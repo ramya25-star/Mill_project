@@ -617,12 +617,13 @@ export const sendDailySummary = async (to, firstName, stats = {}, { trigger = 'd
     {
       type: 'body',
       parameters: [
+        // Template lines: {{1}} name, then No Response, Acknowledged, Booked, Received, Delayed
         { type: 'text', text: String(firstName || 'User') },
-        { type: 'text', text: String(stats.live ?? 0) },
-        { type: 'text', text: String(stats.awaitingDate ?? 0) },
-        { type: 'text', text: String(stats.booked ?? 0) },
-        { type: 'text', text: String(stats.overdue ?? 0) },
-        { type: 'text', text: String(stats.rejected ?? 0) }
+        { type: 'text', text: String(stats.noResponse ?? 0) },
+        { type: 'text', text: String(stats.acknowledged ?? 0) },
+        { type: 'text', text: String(stats.bookedStatus ?? 0) },
+        { type: 'text', text: String(stats.received ?? 0) },
+        { type: 'text', text: String(stats.delayed ?? 0) }
       ]
     }
   ];
