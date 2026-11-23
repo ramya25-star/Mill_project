@@ -159,7 +159,7 @@ const usageOf = (code) => {
   }
 };
 
-const tenantSummary = (t) => ({ ...t, access: tenantAccess(t), usage: usageOf(t.code) });
+const tenantSummary = (t) => ({ ...t, isDefault: isDefaultTenant(t.code), access: tenantAccess(t), usage: usageOf(t.code) });
 
 router.get('/overview', requirePermission('tenants.read'), (req, res) => {
   const tenants = listTenants().map(tenantSummary);
