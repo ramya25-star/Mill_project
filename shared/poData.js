@@ -22,23 +22,24 @@ export const formatPoDate = (value) => {
  * @param {object} order      the order (request) record
  * @param {object} [supplier] the supplier record, if any
  * @param {string} signatory  name printed under "Authorized Signatory"
+ * @param {Array}  [addressBook] the company's own addresses (Company Profile); built-in ones when empty
  */
-export const poDataFromOrder = (order, supplier = {}, signatory = '') => {
+export const poDataFromOrder = (order, supplier = {}, signatory = '', addressBook = null) => {
   const req = order || {};
   const sup = supplier || {};
   const phone = sup.whatsappNumber || sup.phoneNumber || req.suggestedSupplierPhone || '';
   const items = (Array.isArray(req.items) && req.items.length > 0)
     ? req.items
     : [{ productName: req.productName, qty: req.qty, units: req.units, description: req.description }];
-  const billTo = getCompanyAddress(req.billTo, 'billTo');
-  const shipTo = getCompanyAddress(req.shipTo || req.billTo, 'shipTo');
+  const billTo = getCompanyAddress(req.billTo, 'billTo', addressBook);
+  const shipTo = getCompanyAddress(req.shipTo || req.billTo, 'shipTo', addressBook);
 
   return {
     poNumber: req.poNumber || req.id || '',
     poDate: formatPoDate(req.poDate || req.createdAt || new Date().toISOString()),
     dueDate: formatPoDate(req.dueDate),
-    billTo: billTo.length ? billTo : [req.billTo || DEFAULT_COMPANY],
-    shipTo: shipTo.length ? shipTo : [req.shipTo || req.billTo || DEFAULT_COMPANY],
+    billTo: billTo.length ? billTo : [req.billTo || (addressBook ? '' : DEFAULT_COMPANY)].filter(Boolean),
+    shipTo: shipTo.length ? shipTo : [req.shipTo || req.billTo || (addressBook ? '' : DEFAULT_COMPANY)].filter(Boolean),
     supplier: [
       sup.companyName || req.suggestedSupplier || req.supplierName || 'N/A',
       sup.address,

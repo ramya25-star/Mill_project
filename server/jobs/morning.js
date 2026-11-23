@@ -8,6 +8,9 @@ import {
   sendDatePending,
   getSupplierNameForOrder
 } from '../whatsapp.js';
+import { hasFeature, listTenants, tenantAccess } from '../platform.js';
+import { getCompanyProfile } from '../companyProfile.js';
+import { runWithTenant, isDefaultTenant, DEFAULT_TENANT_CODE } from '../tenantContext.js';
 
 let scheduledInstance = null;
 
@@ -122,7 +125,31 @@ export const getKolkataTime = (date = new Date()) => {
 // =============================================================================
 // MAIN MORNING AUTOMATION EXECUTION
 // =============================================================================
+// Runs the morning jobs for every company whose subscription allows it (a
+// paused or expired company gets no reminders and no summary). Returns the
+// default company's result (same shape as before) plus every company's result
+// under `tenants`.
 export async function runMorningJobs({ force = false, now = new Date() } = {}) {
+  const results = {};
+  for (const tenant of listTenants()) {
+    const access = tenantAccess(tenant, now);
+    if (!access.automation) {
+      console.log(`[Morning Jobs] ${tenant.code}: skipped (${access.state}).`);
+      results[tenant.code] = { skipped: true, reason: `subscription_${access.state}` };
+      continue;
+    }
+    try {
+      results[tenant.code] = await runWithTenant(tenant.code, () => runMorningJobsForCurrentTenant({ force, now }));
+    } catch (err) {
+      console.error(`[Morning Jobs] ${tenant.code}: failed:`, err?.message || err);
+      results[tenant.code] = { error: err?.message || String(err) };
+    }
+  }
+  return { ...(results[DEFAULT_TENANT_CODE] || {}), tenants: results };
+}
+
+// The morning jobs for the company the caller runs in (see runWithTenant).
+export async function runMorningJobsForCurrentTenant({ force = false, now = new Date() } = {}) {
   const todayStr = getKolkataDateString(now);
   const { hour, minute } = getKolkataTime(now);
 
@@ -233,7 +260,8 @@ export async function runMorningJobs({ force = false, now = new Date() } = {}) {
   // ---------------------------------------------------------------------------
   // 2. Daily summary (Rule G: Admin role only, once per admin phone per day)
   // ---------------------------------------------------------------------------
-  const users = db.prepare('SELECT * FROM users WHERE enabled = 1').all();
+  const summaryOn = hasFeature('dailySummary') && hasFeature('whatsapp');
+  const users = summaryOn ? db.prepare('SELECT * FROM users WHERE enabled = 1').all() : [];
   let summariesSent = 0;
   const sentPhones = new Set();
 
@@ -270,8 +298,12 @@ export async function runMorningJobs({ force = false, now = new Date() } = {}) {
     }
   }
 
-  const envRecipients = (process.env.DAILY_SUMMARY_RECIPIENTS || '')
-    .split(',')
+  // DAILY_SUMMARY_RECIPIENTS (server setting) is the default company's; every
+  // company can add numbers in its Company Profile.
+  const envRecipients = (summaryOn ? [
+    ...(isDefaultTenant() ? (process.env.DAILY_SUMMARY_RECIPIENTS || '').split(',') : []),
+    ...getCompanyProfile().summaryRecipients
+  ] : [])
     .map(p => toDigitsOnly(p.trim()))
     .filter(Boolean);
 
@@ -294,7 +326,10 @@ export async function runMorningJobs({ force = false, now = new Date() } = {}) {
   let needsCallFlagged = 0;
 
   // Rule A: Reminders only apply to orders whose PO was sent through the API (po_wamid is set)
-  const candidateOrders = db.prepare("SELECT id FROM requests WHERE po_wamid IS NOT NULL AND trim(po_wamid) != ''").all();
+  const remindersOn = hasFeature('supplierReminders') && hasFeature('whatsapp');
+  const candidateOrders = remindersOn
+    ? db.prepare("SELECT id FROM requests WHERE po_wamid IS NOT NULL AND trim(po_wamid) != ''").all()
+    : [];
 
   for (const candidate of candidateOrders) {
     // Rule H: Re-read fresh order row from DB immediately before evaluating send

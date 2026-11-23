@@ -5,6 +5,8 @@ import { requireAuth, signToken } from '../middleware/auth.js';
 import { serializeUser } from '../serializers.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { asText, validatePassword } from '../validation.js';
+import { getTenant, tenantAccess } from '../platform.js';
+import { runWithTenant, normalizeTenantCode, DEFAULT_TENANT_CODE } from '../tenantContext.js';
 
 const router = Router();
 
@@ -42,16 +44,19 @@ setInterval(() => {
   }
 }, FAIL_WINDOW_MS).unref();
 
+// companyCode picks the company; old app versions don't send one and sign in to
+// the default company (Alagiri Duplex) exactly as before.
 router.post('/login', asyncHandler(async (req, res) => {
   const username = asText(req.body?.username);
   const password = asText(req.body?.password);
+  const companyCode = normalizeTenantCode(asText(req.body?.companyCode) || DEFAULT_TENANT_CODE);
   if (!username || !password) {
     return res.status(400).json({ error: 'Please fill in both fields.' });
   }
 
   const now = Date.now();
   const ipKey = `ip:${req.ip}`;
-  const accountKey = `acct:${req.ip}:${username.toLowerCase()}`;
+  const accountKey = `acct:${req.ip}:${companyCode}:${username.toLowerCase()}`;
   const blocked = [
     [recentFailures(accountKey, now), MAX_FAILS_PER_ACCOUNT],
     [recentFailures(ipKey, now), MAX_FAILS_PER_IP]
@@ -67,23 +72,35 @@ router.post('/login', asyncHandler(async (req, res) => {
     return res.status(401).json({ error: 'Invalid username or password' });
   };
 
-  const row = db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').get(username);
-  if (!row) {
-    return fail();
+  const tenant = getTenant(companyCode);
+  if (!tenant) {
+    recordFailure(ipKey, now);
+    return res.status(401).json({ error: 'Unknown company code. Please check it with your administrator.', code: 'TENANT_NOT_FOUND' });
   }
-  if (!row.enabled) {
-    return res.status(403).json({ error: 'Your account is disabled. Please contact the administrator.' });
+  const access = tenantAccess(tenant);
+  if (!access.canLogin) {
+    return res.status(403).json({ error: access.message, code: 'TENANT_BLOCKED' });
   }
 
-  const isMatch = await bcrypt.compare(password, row.password_hash);
-  if (!isMatch) {
-    return fail();
-  }
-  failures.delete(accountKey);
+  return runWithTenant(companyCode, async () => {
+    const row = db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').get(username);
+    if (!row) {
+      return fail();
+    }
+    if (!row.enabled) {
+      return res.status(403).json({ error: 'Your account is disabled. Please contact the administrator.' });
+    }
 
-  const user = serializeUser(row);
-  const token = signToken(row);
-  res.json({ token, user });
+    const isMatch = await bcrypt.compare(password, row.password_hash);
+    if (!isMatch) {
+      return fail();
+    }
+    failures.delete(accountKey);
+
+    const user = serializeUser(row);
+    const token = signToken(row, companyCode);
+    res.json({ token, user, company: { code: tenant.code, name: tenant.name } });
+  });
 }));
 
 router.get('/me', requireAuth, (req, res) => {
@@ -92,6 +109,7 @@ router.get('/me', requireAuth, (req, res) => {
 
 // Self-service change with current-password verification (Settings screen).
 router.post('/change-password', requireAuth, asyncHandler(async (req, res) => {
+  if (req.user.isSupport) return res.status(403).json({ error: 'Support sessions cannot change passwords.' });
   const currentPassword = asText(req.body?.currentPassword);
   const newPassword = asText(req.body?.newPassword);
   if (!currentPassword || !newPassword) {
@@ -115,6 +133,7 @@ router.post('/change-password', requireAuth, asyncHandler(async (req, res) => {
 // Mandatory first-login password change - no current-password check, but only
 // ever acts on the authenticated user's own account (never a client-supplied id).
 router.post('/force-change-password', requireAuth, asyncHandler(async (req, res) => {
+  if (req.user.isSupport) return res.status(403).json({ error: 'Support sessions cannot change passwords.' });
   const newPassword = asText(req.body?.newPassword);
   if (!newPassword) {
     return res.status(400).json({ error: 'A new password is required.' });

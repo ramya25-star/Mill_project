@@ -12,6 +12,8 @@ import settingsRoutes from './routes/settings.js';
 import whatsappRoutes from './routes/whatsapp.js';
 import fileRoutes from './routes/files.js';
 import appUpdateRoutes from './routes/appUpdate.js';
+import tenantRoutes from './routes/tenant.js';
+import platformRoutes from './routes/platform.js';
 import { s3Enabled, getBucket } from './storage.js';
 import { validateTemplateConfig } from './whatsapp.js';
 import { startMorningJobScheduler } from './jobs/morning.js';
@@ -49,6 +51,8 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/app-update', appUpdateRoutes);
+app.use('/api/tenant', tenantRoutes);
+app.use('/api/platform', platformRoutes);
 
 // Unknown API routes get JSON like every other API error, not Express's HTML page.
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));

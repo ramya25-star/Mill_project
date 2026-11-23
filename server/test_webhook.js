@@ -9,6 +9,8 @@ import jwt from 'jsonwebtoken';
 // Set process.env.DB_PATH before db.js or any other module loads
 const testDbPath = path.join(os.tmpdir(), `millmate-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.db`);
 process.env.DB_PATH = testDbPath;
+const testPlatformDbPath = `${testDbPath}.platform.db`;
+process.env.PLATFORM_DB_PATH = testPlatformDbPath;
 const testPort = process.env.TEST_PORT || '4099';
 process.env.PORT = testPort;
 
@@ -1201,6 +1203,8 @@ async function run() {
       if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
       if (fs.existsSync(`${testDbPath}-wal`)) fs.unlinkSync(`${testDbPath}-wal`);
       if (fs.existsSync(`${testDbPath}-shm`)) fs.unlinkSync(`${testDbPath}-shm`);
+      try { (await import('./platform.js')).platformDb.close(); } catch { /* already closed */ }
+      for (const suffix of ['', '-wal', '-shm']) { try { fs.rmSync(`${testPlatformDbPath}${suffix}`, { force: true }); } catch { /* still open */ } }
       console.log(`[Test Cleanup] Isolated temporary database deleted: ${testDbPath}`);
     } catch (err) {
       console.warn('[Test Cleanup] Could not remove temporary test DB:', err.message);

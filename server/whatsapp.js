@@ -3,7 +3,23 @@
 // validating inbound webhook handshakes and signatures.
 import crypto from 'node:crypto';
 import { db } from './db.js';
-import { generatePoPdfBuffer } from './routes/files.js';
+import { generatePoPdfBuffer, poSignaturePayload } from './routes/files.js';
+import { indexOutboundMessage, hasFeature } from './platform.js';
+import { currentTenantCode, isDefaultTenant, normalizeTenantCode, isValidTenantCode } from './tenantContext.js';
+
+// Flow buttons carry a token that comes back with the supplier's answer. For
+// the default company it is the bare order id (as always); other companies
+// get "CODE:orderId" so the answer can be routed to the right company.
+export const flowTokenFor = (orderId, code = currentTenantCode()) => (
+  isDefaultTenant(code) ? String(orderId) : `${normalizeTenantCode(code)}:${orderId}`
+);
+
+export const parseFlowToken = (raw) => {
+  const token = String(raw || '').trim();
+  const m = /^([A-Za-z][A-Za-z0-9]{2,19}):(.+)$/.exec(token);
+  if (m && isValidTenantCode(m[1])) return { tenantCode: normalizeTenantCode(m[1]), token: m[2] };
+  return { tenantCode: null, token };
+};
 
 const GRAPH_API_VERSION = 'v21.0';
 
@@ -83,9 +99,11 @@ export const getPublicBaseUrl = () => {
 export const generateSignedPoUrl = (orderId, expiresInSeconds = 7 * 86400) => {
   const expires = Math.floor(Date.now() / 1000) + expiresInSeconds;
   const secret = process.env.META_APP_SECRET || process.env.JWT_SECRET || 'mill-mate-po-secret';
-  const sig = crypto.createHmac('sha256', secret).update(`${orderId}:${expires}`).digest('hex');
+  const code = currentTenantCode();
+  const sig = crypto.createHmac('sha256', secret).update(poSignaturePayload(orderId, expires, code)).digest('hex');
   const baseUrl = getPublicBaseUrl();
-  return `${baseUrl}/api/files/po/${encodeURIComponent(orderId)}.pdf?expires=${expires}&signature=${sig}`;
+  const tenantParam = isDefaultTenant(code) ? '' : `&t=${encodeURIComponent(code)}`;
+  return `${baseUrl}/api/files/po/${encodeURIComponent(orderId)}.pdf?expires=${expires}&signature=${sig}${tenantParam}`;
 };
 
 // Keeps E.164 formatted (+ prefix) for database queries/logging consistency
@@ -118,6 +136,7 @@ export const logMessage = ({ requestId, orderId, direction, toNumber, fromNumber
       error || null,
       trigger || null
     );
+    if ((direction || 'outbound') === 'outbound') indexOutboundMessage({ wamid: messageWamid, phone: toNumber });
   } catch (err) {
     console.error('[whatsapp.js] Failed to log message:', err?.message || err);
   }
@@ -137,6 +156,9 @@ export const updateMessageStatus = ({ providerMessageId, status, error }) => {
 };
 
 const callGraphApi = async (endpoint, payload) => {
+  if (!hasFeature('whatsapp')) {
+    throw new Error("WhatsApp messaging is not included in this company's Mill Mate plan.");
+  }
   const token = getAccessToken();
   const phoneNumberId = getPhoneNumberId();
 
@@ -322,7 +344,7 @@ export const sendPO = async (orderOrId) => {
         {
           type: 'action',
           action: {
-            flow_token: String(order.id),
+            flow_token: flowTokenFor(order.id),
             flow_action_data: { po_number: poNumber }
           }
         }
@@ -404,7 +426,7 @@ export const sendOverdue = async (orderOrId, { trigger = 'overdue_reminder' } = 
         {
           type: 'action',
           action: {
-            flow_token: String(order.id),
+            flow_token: flowTokenFor(order.id),
             flow_action_data: { po_number: poNumber }
           }
         }
@@ -458,7 +480,7 @@ export const sendDatePending = async (orderOrId, { reminderNumber = 1, trigger }
         {
           type: 'action',
           action: {
-            flow_token: String(order.id),
+            flow_token: flowTokenFor(order.id),
             flow_action_data: { po_number: poNumber }
           }
         }

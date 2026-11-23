@@ -5,14 +5,18 @@ import { jsPDF } from 'jspdf';
 import { buildPoPdf } from '../../shared/poPdfLayout.js';
 import { poDataFromOrder } from '../../shared/poData.js';
 import { db } from '../db.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, getJwtSecret, tokenTenantCode } from '../middleware/auth.js';
+import { getTenant } from '../platform.js';
+import { runWithTenant, normalizeTenantCode, DEFAULT_TENANT_CODE, isDefaultTenant } from '../tenantContext.js';
+import { getCompanyProfile } from '../companyProfile.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
-import { s3Enabled, parseUpload, uploadFile, keyFromRef, presignedUrl } from '../storage.js';
+import { s3Enabled, parseUpload, uploadFile, keyFromRef, presignedUrl, refBelongsToTenant } from '../storage.js';
 
 const router = Router();
 
 // Builds the PO PDF suppliers receive on WhatsApp, with the same A4 layout the
-// app uses (shared/poPdfLayout.js).
+// app uses (shared/poPdfLayout.js). Runs for the current company: its supplier
+// list, its addresses and its signatory.
 const PO_SIGNATORY = process.env.PO_SIGNATORY_NAME || 'Johnson'; // same as CONFIG.users.admin.name in src/config.js
 
 export function generatePoPdfBuffer(order) {
@@ -21,15 +25,23 @@ export function generatePoPdfBuffer(order) {
     const srow = db.prepare('SELECT data FROM suppliers WHERE id = ?').get(order.supplierId);
     if (srow) { try { supplier = JSON.parse(srow.data || '{}'); } catch { supplier = {}; } }
   }
-  const doc = buildPoPdf(poDataFromOrder(order, supplier, PO_SIGNATORY), { jsPDF });
+  const profile = getCompanyProfile();
+  const signatory = profile.poSignatory || (isDefaultTenant() ? PO_SIGNATORY : '');
+  const doc = buildPoPdf(poDataFromOrder(order, supplier, signatory, profile.addresses), { jsPDF });
   return Buffer.from(doc.output('arraybuffer'));
 }
+
+// What the PO link signature covers. The default company keeps the original
+// format so links already sent to suppliers keep working.
+export const poSignaturePayload = (orderId, expires, tenantCode) => (
+  isDefaultTenant(tenantCode) ? `${orderId}:${expires}` : `${normalizeTenantCode(tenantCode)}:${orderId}:${expires}`
+);
 
 // Public/Signed Expiring endpoint for Meta WhatsApp Cloud API to fetch PO PDFs without login
 router.get('/po/:orderId.pdf', asyncHandler(async (req, res) => {
   const { orderId } = req.params;
   const { expires, signature } = req.query;
-
+  let tenantCode = normalizeTenantCode(req.query.t || DEFAULT_TENANT_CODE);
 
   // If signature and expires are provided, verify HMAC
   if (expires && signature) {
@@ -38,7 +50,7 @@ router.get('/po/:orderId.pdf', asyncHandler(async (req, res) => {
       return res.status(401).json({ error: 'PO PDF link has expired.' });
     }
     const secret = process.env.META_APP_SECRET || process.env.JWT_SECRET || 'mill-mate-po-secret';
-    const expectedSig = crypto.createHmac('sha256', secret).update(`${orderId}:${expires}`).digest('hex');
+    const expectedSig = crypto.createHmac('sha256', secret).update(poSignaturePayload(orderId, expires, tenantCode)).digest('hex');
     const sigBuf = Buffer.from(String(signature), 'utf8');
     const expBuf = Buffer.from(expectedSig, 'utf8');
     if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
@@ -48,27 +60,36 @@ router.get('/po/:orderId.pdf', asyncHandler(async (req, res) => {
     // No signed link: only a logged-in app user may open it. The token must be
     // valid - just sending some Authorization header is not enough - and this
     // applies in dry-run too, so PO details are never public by order ID.
+    // The company always comes from the token, never from the URL.
     const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
     let validUser = false;
     try {
-      const payload = token ? jwt.verify(token, process.env.JWT_SECRET) : null;
-      validUser = !!(payload && db.prepare('SELECT 1 FROM users WHERE id = ? AND enabled = 1').get(payload.sub));
+      const payload = token ? jwt.verify(token, getJwtSecret()) : null;
+      if (payload) {
+        tenantCode = tokenTenantCode(payload);
+        validUser = !!getTenant(tenantCode) && runWithTenant(tenantCode, () => (
+          payload.support ? true : !!db.prepare('SELECT 1 FROM users WHERE id = ? AND enabled = 1').get(payload.sub)
+        ));
+      }
     } catch { /* invalid or expired token */ }
     if (!validUser) {
       return res.status(401).json({ error: 'Authentication or valid signed link required.' });
     }
   }
 
-  const row = db.prepare('SELECT data FROM requests WHERE id = ?').get(orderId);
-  if (!row) return res.status(404).json({ error: 'Order not found.' });
-  let order;
-  try { order = { ...JSON.parse(row.data || '{}'), id: orderId }; } catch { order = { id: orderId }; }
+  if (!getTenant(tenantCode)) return res.status(404).json({ error: 'Order not found.' });
+  return runWithTenant(tenantCode, () => {
+    const row = db.prepare('SELECT data FROM requests WHERE id = ?').get(orderId);
+    if (!row) return res.status(404).json({ error: 'Order not found.' });
+    let order;
+    try { order = { ...JSON.parse(row.data || '{}'), id: orderId }; } catch { order = { id: orderId }; }
 
-  const pdfBuffer = generatePoPdfBuffer(order);
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="PO-${orderId}.pdf"`);
-  res.setHeader('Cache-Control', 'private, max-age=300');
-  res.send(pdfBuffer);
+    const pdfBuffer = generatePoPdfBuffer(order);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="PO-${orderId}.pdf"`);
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.send(pdfBuffer);
+  });
 }));
 
 router.use(requireAuth);
@@ -93,6 +114,8 @@ router.get('/url', asyncHandler(async (req, res) => {
 
   const key = keyFromRef(req.query.ref);
   if (!key) return res.status(400).json({ error: 'Invalid file reference.' });
+  // A company can only open its own files.
+  if (!refBelongsToTenant(req.query.ref)) return res.status(404).json({ error: 'File not found.' });
 
   res.json({ url: await presignedUrl(key) });
 }));

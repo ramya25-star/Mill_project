@@ -16,9 +16,12 @@ import {
   toDigitsOnly,
   toE164,
   getSupplierPhoneForOrder,
-  isAvailabilityEnabled
+  isAvailabilityEnabled,
+  parseFlowToken
 } from '../whatsapp.js';
-import { runMorningJobs } from '../jobs/morning.js';
+import { runMorningJobsForCurrentTenant } from '../jobs/morning.js';
+import { tenantForWamid, tenantsForPhone, getTenant } from '../platform.js';
+import { runWithTenant, DEFAULT_TENANT_CODE } from '../tenantContext.js';
 import { saveMediaBuffer } from '../storage.js';
 
 const router = Router();
@@ -151,7 +154,7 @@ router.post('/jobs/morning/run', requireAuth, (req, res, next) => {
   }
   next();
 }, asyncHandler(async (req, res) => {
-  const result = await runMorningJobs({ force: true });
+  const result = await runMorningJobsForCurrentTenant({ force: true });
   res.json({ success: true, result });
 }));
 
@@ -203,11 +206,11 @@ router.post('/inbound', (req, res) => {
               errorDetails = ` | Errors: ${JSON.stringify(statusItem.errors)}`;
             }
             console.log(`[Status] Recipient: ${recipient} | Status: ${status} | ID: ${id}${errorDetails}`);
-            updateMessageStatus({
+            runWithTenant(tenantForWamid(id) || DEFAULT_TENANT_CODE, () => updateMessageStatus({
               providerMessageId: id,
               status,
               error: statusItem.errors ? JSON.stringify(statusItem.errors) : null
-            });
+            }));
           }
         }
 
@@ -215,7 +218,8 @@ router.post('/inbound', (req, res) => {
         if (Array.isArray(value.messages)) {
           const displayPhoneNumber = value.metadata?.display_phone_number || '';
           for (const message of value.messages) {
-            await handleIncomingMessage(message, displayPhoneNumber);
+            const tenantCode = resolveInboundTenant(message);
+            await runWithTenant(tenantCode, () => handleIncomingMessage(message, displayPhoneNumber));
           }
         }
       };
@@ -300,6 +304,27 @@ const extractDispatchDateFromFlow = (flowData) => {
   return null;
 };
 
+// One WhatsApp number serves every company. Which company a supplier's message
+// belongs to, in order of certainty:
+//   1. a Flow answer whose token carries the company ("CODE:orderId"),
+//   2. a reply quoting one of our messages (we remember every message we send),
+//   3. the company that messaged this supplier most recently,
+//   4. otherwise the default company (the only one before multi-company).
+export const resolveInboundTenant = (message) => {
+  const known = (code) => (code && getTenant(code) ? code : null);
+  const nfm = message?.interactive?.nfm_reply;
+  if (nfm) {
+    let flowData = {};
+    try { flowData = JSON.parse(nfm.response_json || '{}'); } catch { flowData = {}; }
+    const fromToken = known(parseFlowToken(nfm.flow_token || flowData.flow_token).tenantCode);
+    if (fromToken) return fromToken;
+  }
+  const fromContext = known(tenantForWamid(message?.context?.id));
+  if (fromContext) return fromContext;
+  const fromPhone = tenantsForPhone(message?.from).find(code => known(code));
+  return fromPhone || DEFAULT_TENANT_CODE;
+};
+
 const handleIncomingMessage = async (message, toPhoneNumber) => {
   const messageId = message?.id;
   if (!messageId) return;
@@ -340,7 +365,8 @@ const handleIncomingMessage = async (message, toPhoneNumber) => {
       flowData = {};
     }
 
-    const flowToken = nfmReply?.flow_token || flowData?.flow_token || message.context?.flow_token || '';
+    // "CODE:orderId" tokens: the company part was used for routing; match on the rest.
+    const flowToken = parseFlowToken(nfmReply?.flow_token || flowData?.flow_token || message.context?.flow_token || '').token;
     console.log(`[Flow Response] Token: ${flowToken} | Data:`, flowData);
 
     // 1. Check if flow_token matches an Order (Purchase Order dispatch date flow)

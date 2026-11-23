@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from '../db.js';
-import { requireAuth, requireRole } from '../middleware/auth.js';
+import { requireAuth, requireRole, withRequestTenant, tenantCodeFromBearer } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -19,7 +19,9 @@ const setSetting = (key, value) => {
 // (name, colors, billing locations), not sensitive, and the login screen
 // itself needs to theme correctly before anyone is authenticated. Only
 // changing it is privileged.
-router.get('/branding', (req, res) => {
+// ?company=CODE picks the company (the login screen knows it before sign-in);
+// without it, the default company as before.
+router.get('/branding', withRequestTenant(req => req.query.company || tenantCodeFromBearer(req)), (req, res) => {
   res.json(getSetting('branding', {}));
 });
 

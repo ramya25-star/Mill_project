@@ -32,8 +32,25 @@ export const COMPANY_ADDRESSES = {
   ]
 };
 
-export const getCompanyAddress = (companyName, type = 'billTo') => {
+// A company's own address book (from its Company Profile), used instead of the
+// built-in Alagiri addresses when given: [{ name, group, lines: [] }].
+export const addressFromBook = (book, companyName) => {
+  const wanted = String(companyName || '').trim().toLowerCase();
+  const hit = book.find(a => String(a.name).trim().toLowerCase() === wanted);
+  return hit ? hit.lines : (companyName ? [companyName] : []);
+};
+
+// Ship To choices for a Bill To: the addresses in the same group.
+export const shipToFromBook = (book, billTo) => {
+  const wanted = String(billTo || '').trim().toLowerCase();
+  const hit = book.find(a => String(a.name).trim().toLowerCase() === wanted);
+  if (!hit) return [];
+  return book.filter(a => (a.group || a.name) === (hit.group || hit.name)).map(a => a.name);
+};
+
+export const getCompanyAddress = (companyName, type = 'billTo', book = null) => {
   if (!companyName) return [];
+  if (Array.isArray(book) && book.length) return addressFromBook(book, companyName);
   
   // Exact match
   if (COMPANY_ADDRESSES[companyName]) {

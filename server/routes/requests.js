@@ -3,6 +3,7 @@ import { db } from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { isDoneStatus } from '../jobs/morning.js';
 import { serializeRequest } from '../serializers.js';
+import { tenantLimits } from '../platform.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -20,6 +21,13 @@ router.post('/', (req, res) => {
   const existing = db.prepare('SELECT id FROM requests WHERE id = ?').get(requestData.id);
   if (existing) {
     return res.status(409).json({ error: `Request ${requestData.id} already exists.` });
+  }
+  const { limits } = tenantLimits();
+  if (limits.maxOrdersPerMonth) {
+    const thisMonth = db.prepare("SELECT COUNT(*) AS n FROM requests WHERE created_at >= datetime('now', 'start of month')").get().n;
+    if (thisMonth >= limits.maxOrdersPerMonth) {
+      return res.status(403).json({ error: `Your Mill Mate plan allows ${limits.maxOrdersPerMonth} new requests a month. Contact Mill Mate to upgrade.`, code: 'PLAN_LIMIT' });
+    }
   }
   db.prepare('INSERT INTO requests (id, status, data) VALUES (?, ?, ?)')
     .run(requestData.id, requestData.status || null, JSON.stringify(requestData));

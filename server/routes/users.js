@@ -5,6 +5,7 @@ import { requireAuth, requireRole } from '../middleware/auth.js';
 import { serializeUser } from '../serializers.js';
 import { validateUserFields, asText, validatePassword, USER_ROLES, NAME_REGEX, EMAIL_REGEX, PHONE_REGEX, compactPhone, normalizePhone } from '../validation.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
+import { tenantLimits } from '../platform.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -46,6 +47,14 @@ router.post('/', requireRole('Main Admin'), asyncHandler(async (req, res) => {
   if (asText(body.password)) {
     const pwError = validatePassword(asText(body.password));
     if (pwError) return res.status(400).json({ error: pwError });
+  }
+
+  const { limits } = tenantLimits();
+  if (limits.maxUsers) {
+    const active = db.prepare('SELECT COUNT(*) AS n FROM users WHERE enabled = 1').get().n;
+    if (active >= limits.maxUsers) {
+      return res.status(403).json({ error: `Your Mill Mate plan allows ${limits.maxUsers} active users. Disable a user or contact Mill Mate to upgrade.`, code: 'PLAN_LIMIT' });
+    }
   }
 
   const existingUsername = db.prepare('SELECT id FROM users WHERE username = ? COLLATE NOCASE').get(username);
