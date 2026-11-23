@@ -4,8 +4,8 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { ErrorBoundary } from './components/ErrorBoundary.jsx';
 import { checkForAppUpdate } from './services/liveUpdate.js';
 import './App.css';
-import { CONFIG } from './config';
-import { apiService, onUnauthorized, getAuthToken, clearAuthToken, cacheCurrentUser } from './services/api';
+import { CONFIG, applyCompanyProfile } from './config';
+import { apiService, onUnauthorized, getAuthToken, clearAuthToken, cacheCurrentUser, startSupportSession, isSupportSession, endSupportSession } from './services/api';
 import {
   HomeView,
   CreateRequestView,
@@ -26,6 +26,7 @@ import {
   DepartmentManagementView,
   AutomationPanel,
   ViewChatView,
+  CompanySettingsView,
   Icons
 } from './components/Views';
 
@@ -83,6 +84,23 @@ export default function App() {
   // Developer console state
   const [devConsoleOpen, setDevConsoleOpen] = useState(false);
 
+  // The signed-in company: subscription status, plan, announcements and its
+  // Company Profile (PO addresses, signatory). Mill Mate serves many companies.
+  const [tenantInfo, setTenantInfo] = useState(null);
+  const [supportSession, setSupportSession] = useState(() => isSupportSession());
+  const refreshTenantInfo = async () => {
+    try {
+      const info = await apiService.getTenant();
+      applyCompanyProfile(info.profile, { isDefault: info.isDefault });
+      setTenantInfo(info);
+      setSupportSession(!!info.isSupportSession);
+      return info;
+    } catch (err) {
+      console.error('Could not load company details:', err);
+      return null;
+    }
+  };
+
 
   // Clock
   const [clockTime, setClockTime] = useState("17:50");
@@ -103,6 +121,8 @@ export default function App() {
       // with the view_logs permission) - only those roles can see the full
       // audit trail, everyone else gets [] instead of a 403.
       const canViewLogs = user.role === 'Main Admin' || (user.role === 'Sub Admin' && !!user.permissions?.view_logs);
+
+      await refreshTenantInfo();
 
       const reqs = await apiService.getRequests();
       const sups = await apiService.getSuppliers();
@@ -286,6 +306,17 @@ export default function App() {
 
     const loadData = async () => {
       try {
+        // Mill Mate support opening this company's app from the Console:
+        // take the 30-minute token from the link, then drop it from the
+        // address bar and history.
+        const supportMatch = /^#support-login\?token=([^&]+)/.exec(window.location.hash || '');
+        if (supportMatch) {
+          startSupportSession(decodeURIComponent(supportMatch[1]));
+          setSupportSession(true);
+          window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#home`);
+          setCurrentHash('#home');
+        }
+
         // Refresh the session against the real backend: this catches a token
         // that expired while the tab was closed, or an account that was
         // disabled/deleted since the last visit, and logs the user out
@@ -572,6 +603,9 @@ export default function App() {
     onUnauthorized(() => {
       setCurrentUser(null);
       localStorage.removeItem("pms_current_user");
+      endSupportSession();
+      setSupportSession(false);
+      setTenantInfo(null);
       showToast("Session Expired", "Please log in again.", "info");
       window.location.hash = "#home";
     });
@@ -635,6 +669,10 @@ export default function App() {
     setCurrentUser(null);
     localStorage.removeItem("pms_current_user");
     clearAuthToken();
+    endSupportSession();
+    setSupportSession(false);
+    setTenantInfo(null);
+    applyCompanyProfile(null);
     window.location.hash = "#home";
   };
 
@@ -853,6 +891,13 @@ export default function App() {
           return null;
         }
         return <DepartmentManagementView {...navProps} />;
+      case '#settings/company':
+        // Guard: Main Admin only - PO addresses and support access
+        if (currentUser.role !== 'Main Admin') {
+          window.location.hash = '#settings';
+          return null;
+        }
+        return <CompanySettingsView {...navProps} tenantInfo={tenantInfo} refreshTenantInfo={refreshTenantInfo} />;
       case '#settings/branding':
         // Guard: Main Admin only - branding/API settings affect every user
         if (currentUser.role !== 'Main Admin') {
@@ -979,6 +1024,24 @@ export default function App() {
             onTouchEnd={handlePullEnd}
             onTouchCancel={handlePullEnd}
           >
+            {currentUser && (supportSession || tenantInfo?.access?.message || tenantInfo?.announcements?.length > 0) && (
+              <div className="tenant-banners">
+                {supportSession && (
+                  <div className="tenant-banner warning" role="status">
+                    Mill Mate Support session{tenantInfo?.name ? ` - ${tenantInfo.name}` : ''}. It ends automatically in 30 minutes.
+                    <button type="button" className="tenant-banner-action" onClick={logout}>End</button>
+                  </div>
+                )}
+                {tenantInfo?.access?.message && (
+                  <div className={`tenant-banner ${['due', 'expired'].includes(tenantInfo.access.state) ? 'warning' : 'info'}`} role="status">
+                    {tenantInfo.access.message}
+                  </div>
+                )}
+                {(tenantInfo?.announcements || []).map(a => (
+                  <div key={a.id} className={`tenant-banner ${a.level === 'warning' ? 'warning' : 'info'}`} role="status">{a.message}</div>
+                ))}
+              </div>
+            )}
             <ErrorBoundary resetKey={currentHash}>
               {renderActiveView()}
             </ErrorBoundary>

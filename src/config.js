@@ -8,6 +8,8 @@ export const BILL_TO_OPTIONS = [
 
 export const getShipToOptions = (billToVal) => {
   if (!billToVal) return [];
+  const book = getAddressBook();
+  if (book || !isOriginalCompany) return book ? shipToFromBook(book, billToVal) : [];
   const normalized = String(billToVal).toLowerCase();
   if (normalized.includes("duplex")) {
     return [
@@ -34,7 +36,35 @@ export const COMPANY_OPTIONS = [
   "Alagiri Paper Mill Office"
 ];
 
-export { COMPANY_ADDRESSES, getCompanyAddress } from '../shared/companyAddresses.js';
+export { COMPANY_ADDRESSES } from '../shared/companyAddresses.js';
+import { getCompanyAddress as sharedGetCompanyAddress, shipToFromBook } from '../shared/companyAddresses.js';
+
+// ----------------------------------------------------
+// Per-company settings (Mill Mate serves many companies)
+// ----------------------------------------------------
+// The signed-in company's Company Profile (Settings > Company): its own PO
+// addresses and signatory. The original company (Alagiri Duplex) keeps the
+// built-in addresses above until it saves its own.
+const BUILT_IN_ADDRESS_NAMES = [...BILL_TO_OPTIONS];
+let activeProfile = null;
+let isOriginalCompany = true;
+
+export const getAddressBook = () => (activeProfile?.addresses?.length ? activeProfile.addresses : null);
+
+// The option lists are shared arrays used across the app, so they are
+// updated in place.
+export const applyCompanyProfile = (profile, { isDefault = true } = {}) => {
+  activeProfile = profile || null;
+  isOriginalCompany = !!isDefault;
+  const book = getAddressBook();
+  const names = book ? book.map(a => a.name) : (isOriginalCompany ? BUILT_IN_ADDRESS_NAMES : []);
+  BILL_TO_OPTIONS.splice(0, BILL_TO_OPTIONS.length, ...names);
+  COMPANY_OPTIONS.splice(0, COMPANY_OPTIONS.length, ...names);
+};
+
+export const getPoSignatory = () => activeProfile?.poSignatory || (isOriginalCompany ? CONFIG.users.admin.name : '');
+
+export const getCompanyAddress = (companyName, type = 'billTo') => sharedGetCompanyAddress(companyName, type, getAddressBook());
 export const CONFIG = {
   // App branding (Can be dynamically configured in settings and saved to localStorage)
   branding: {

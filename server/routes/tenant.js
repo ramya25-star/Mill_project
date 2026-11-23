@@ -5,6 +5,7 @@ import { Router } from 'express';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { tenantLimits, activeAnnouncements, platformDb, getTenant, audit } from '../platform.js';
 import { getCompanyProfile, cleanCompanyProfile, saveCompanyProfile } from '../companyProfile.js';
+import { isDefaultTenant } from '../tenantContext.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -23,6 +24,7 @@ router.get('/', (req, res) => {
   res.json({
     code: tenant.code,
     name: tenant.name,
+    isDefault: isDefaultTenant(tenant.code),
     access: accessView(req.tenantAccess),
     plan: plan ? { id: plan.id, name: plan.name } : null,
     features,

@@ -70,6 +70,36 @@ export const getAuthToken = () => localStorage.getItem(TOKEN_KEY);
 const setAuthToken = (token) => localStorage.setItem(TOKEN_KEY, token);
 export const clearAuthToken = () => localStorage.removeItem(TOKEN_KEY);
 
+// The company this device signs in to (Mill Mate serves many companies).
+// Empty = the original company (Alagiri Duplex), which is what older app
+// versions always used.
+const COMPANY_KEY = 'pms_company_code';
+export const getCompanyCode = () => {
+  try { return localStorage.getItem(COMPANY_KEY) || ''; } catch { return ''; }
+};
+const setCompanyCode = (code) => {
+  try {
+    if (code) localStorage.setItem(COMPANY_KEY, code);
+    else localStorage.removeItem(COMPANY_KEY);
+  } catch { /* storage unavailable */ }
+};
+
+// Mill Mate support opens the app with a 30-minute token from the Console
+// (#support-login?token=...). It replaces any normal session on this device.
+export const startSupportSession = (token) => {
+  setAuthToken(token);
+  try {
+    localStorage.setItem('pms_support_session', '1');
+    localStorage.removeItem('pms_current_user');
+  } catch { /* storage unavailable */ }
+};
+export const isSupportSession = () => {
+  try { return localStorage.getItem('pms_support_session') === '1'; } catch { return false; }
+};
+export const endSupportSession = () => {
+  try { localStorage.removeItem('pms_support_session'); } catch { /* storage unavailable */ }
+};
+
 // Registered by App.jsx so a 401 (expired/invalid session, or an account that
 // was disabled while logged in) can drop the user back to the login screen
 // instead of the UI silently failing every subsequent request.
@@ -285,13 +315,16 @@ export const apiService = {
     return true;
   },
 
-  async authenticate(username, password) {
+  async authenticate(username, password, companyCode = '') {
+    const code = String(companyCode || '').trim().toUpperCase();
     const { token, user } = await apiFetch('/auth/login', {
       method: 'POST',
-      body: { username, password },
+      body: { username, password, ...(code ? { companyCode: code } : {}) },
       skipAuth: true
     });
     setAuthToken(token);
+    endSupportSession();
+    setCompanyCode(code);
     return user;
   },
 
@@ -354,7 +387,23 @@ export const apiService = {
   // BRANDING & WEBHOOK SETTINGS API
   // ------------------------------------------------
   async getBranding() {
-    return apiFetch('/settings/branding');
+    const code = getCompanyCode();
+    return apiFetch(`/settings/branding${code ? `?company=${encodeURIComponent(code)}` : ''}`);
+  },
+
+  // ------------------------------------------------
+  // COMPANY (subscription status, Company Profile, support access)
+  // ------------------------------------------------
+  async getTenant() {
+    return apiFetch('/tenant');
+  },
+
+  async saveCompanyProfile(profile) {
+    return apiFetch('/tenant/profile', { method: 'PUT', body: profile });
+  },
+
+  async setSupportAccess(hours) {
+    return apiFetch('/tenant/support-access', { method: 'PUT', body: { hours } });
   },
 
   async saveBranding(branding) {

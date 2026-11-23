@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
-import { apiService, isStoredFile, cacheCurrentUser } from '../services/api';
-import { CONFIG, COMPANY_ADDRESSES, COMPANY_OPTIONS, BILL_TO_OPTIONS, getShipToOptions, getCompanyAddress } from '../config';
+import { apiService, isStoredFile, cacheCurrentUser, getCompanyCode } from '../services/api';
+import { CONFIG, COMPANY_ADDRESSES, COMPANY_OPTIONS, BILL_TO_OPTIONS, getShipToOptions, getCompanyAddress, getPoSignatory, getAddressBook } from '../config';
 
 // ----------------------------------------------------
 // ICON CONSTANTS (Reusable clean SVG vectors)
@@ -2722,7 +2722,7 @@ export function PoPreviewView({ state, navigateTo, goBack, requestId, addNotific
   const makePoPdf = async () => {
     const { buildPoPdf } = await import('../services/poPdf');
     const { poDataFromOrder } = await import('../../shared/poData.js');
-    const doc = buildPoPdf(poDataFromOrder(req, supplier, CONFIG.users.admin.name));
+    const doc = buildPoPdf(poDataFromOrder(req, supplier, getPoSignatory(), getAddressBook()));
     const fileName = `PO-${String(req.poNumber || requestId).replace(/[^\w.-]+/g, '_')}.pdf`;
     return { doc, fileName };
   };
@@ -2946,7 +2946,7 @@ export function PoPreviewView({ state, navigateTo, goBack, requestId, addNotific
             </div>
             <div style={{ textAlign: 'right' }}>
               Authorized Signatory<br />
-              <span style={{ fontWeight: '900', color: 'var(--primary-orange)', fontSize: '14px' }}>{CONFIG.users.admin.name}</span>
+              <span style={{ fontWeight: '900', color: 'var(--primary-orange)', fontSize: '14px' }}>{getPoSignatory()}</span>
             </div>
           </div>
         </div>
@@ -5254,6 +5254,15 @@ export function SettingsView({ state, navigateTo, openModal, closeModal, setModa
           )}
 
           {isMainAdmin && (
+            <div className="settings-item" onClick={() => navigateTo('#settings/company')} style={{ cursor: 'pointer' }}>
+              <div className="settings-item-left">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" style={{ color: 'var(--primary-orange)' }}><path d="M3 21h18" /><path d="M5 21V7l8-4v18" /><path d="M19 21V11l-6-4" /><path d="M9 9v.01M9 12v.01M9 15v.01M9 18v.01" /></svg>
+                <span className="settings-title">Company &amp; Subscription</span>
+              </div>
+              <Icons.ChevronRight />
+            </div>
+          )}
+          {isMainAdmin && (
             <div className="settings-item" onClick={() => navigateTo('#settings/users')} style={{ cursor: 'pointer' }}>
               <div className="settings-item-left">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" style={{ color: 'var(--primary-orange)' }}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
@@ -6184,6 +6193,9 @@ export function LoginView({ onLogin }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  // Company code: remembered on this device. Empty = the original company
+  // (Alagiri Duplex), so existing users can sign in exactly as before.
+  const [companyCode, setCompanyCode] = useState(() => getCompanyCode());
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -6201,7 +6213,7 @@ export function LoginView({ onLogin }) {
     setLoading(true);
     setError("");
     try {
-      const user = await apiService.authenticate(cleanUsername, cleanPassword);
+      const user = await apiService.authenticate(cleanUsername, cleanPassword, companyCode);
       onLogin(user);
     } catch (err) {
       const errMsg = err.message || "Invalid username or password";
@@ -6270,6 +6282,12 @@ export function LoginView({ onLogin }) {
           <form onSubmit={handleLoginSubmit} style={{ textAlign: 'left' }}>
             <h2 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '16px', color: 'var(--text-main)' }}>Sign In to your account</h2>
             
+            <div className="form-group">
+              <label>Company Code</label>
+              <input type="text" className="form-control" placeholder="e.g. ALAGIRI" value={companyCode} onChange={e => setCompanyCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} maxLength={20} autoCapitalize="characters" autoCorrect="off" spellCheck={false} autoComplete="organization" style={{ cursor: 'text', textTransform: 'uppercase', letterSpacing: '1px' }} />
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Given by your administrator.</div>
+            </div>
+
             <div className="form-group">
               <label>Username</label>
               <input type="text" className="form-control" placeholder="Enter Username" value={username} onChange={e => setUsername(e.target.value)} required style={{ cursor: 'text' }} />
@@ -8064,6 +8082,217 @@ export function ViewChatView({ state, navigateTo, goBack, orderId }) {
                 </div>
               );
             })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------
+// COMPANY SETTINGS (Main Admin): subscription status, Company Profile
+// (PO addresses, signatory, GSTIN, daily summary numbers) and the switch that
+// lets Mill Mate support open the app for a while.
+// ----------------------------------------------------
+const STATE_LABELS = {
+  internal: 'Active',
+  trial: 'Free trial',
+  active: 'Active',
+  due: 'Payment due',
+  expired: 'View-only (subscription ended)',
+  suspended: 'Paused',
+  cancelled: 'Cancelled'
+};
+
+// The built-in Alagiri addresses, shown as a starting point until the
+// original company saves its own list.
+const builtInAddressBook = () => Object.entries(COMPANY_ADDRESSES).map(([name, lines]) => ({
+  name,
+  group: /duplex/i.test(name) ? 'Alagiri Duplex' : 'Alagiri Paper Mill',
+  lines
+}));
+
+const addressesToForm = (book) => (book || []).map(a => ({ name: a.name, group: a.group || a.name, lines: (a.lines || []).join('\n') }));
+
+export function CompanySettingsView({ state, navigateTo, tenantInfo, refreshTenantInfo }) {
+  const { showToast } = state;
+  const profile = tenantInfo?.profile || {};
+  const usingBuiltIn = !profile.addresses?.length && tenantInfo?.isDefault;
+  const startBook = (info) => {
+    const p = info?.profile || {};
+    return addressesToForm(p.addresses?.length ? p.addresses : (info?.isDefault ? builtInAddressBook() : []));
+  };
+
+  const [addresses, setAddresses] = useState(() => startBook(tenantInfo));
+  const [poSignatory, setPoSignatory] = useState(profile.poSignatory || '');
+  const [gstin, setGstin] = useState(profile.gstin || '');
+  const [phone, setPhone] = useState(profile.phone || '');
+  const [email, setEmail] = useState(profile.email || '');
+  const [summaryRecipients, setSummaryRecipients] = useState((profile.summaryRecipients || []).join(', '));
+  const [saving, setSaving] = useState(false);
+  const [supportBusy, setSupportBusy] = useState(false);
+
+  // Fill the form once the company details arrive (direct link / reload).
+  const loadedRef = useRef(!!tenantInfo);
+  useEffect(() => {
+    if (loadedRef.current || !tenantInfo) return;
+    loadedRef.current = true;
+    const p = tenantInfo.profile || {};
+    setAddresses(startBook(tenantInfo));
+    setPoSignatory(p.poSignatory || '');
+    setGstin(p.gstin || '');
+    setPhone(p.phone || '');
+    setEmail(p.email || '');
+    setSummaryRecipients((p.summaryRecipients || []).join(', '));
+  }, [tenantInfo]);
+
+  useEffect(() => {
+    if (!tenantInfo) refreshTenantInfo();
+  }, []);
+
+  const updateAddress = (index, field, value) => {
+    setAddresses(prev => prev.map((a, i) => (i === index ? { ...a, [field]: value } : a)));
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await apiService.saveCompanyProfile({
+        addresses: addresses.map(a => ({ name: a.name.trim(), group: (a.group || '').trim() || a.name.trim(), lines: a.lines.split('\n') })),
+        poSignatory,
+        gstin,
+        phone,
+        email,
+        summaryRecipients
+      });
+      await refreshTenantInfo();
+      showToast('Saved', 'Company details updated. New POs will use them.', 'success');
+    } catch (err) {
+      showToast('Not saved', err.message || 'Could not save company details.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const setSupport = async (hours) => {
+    setSupportBusy(true);
+    try {
+      await apiService.setSupportAccess(hours);
+      await refreshTenantInfo();
+      showToast(
+        hours ? 'Support access on' : 'Support access off',
+        hours ? `Mill Mate support can open your app for the next ${hours} hours.` : 'Mill Mate support can no longer open your app.',
+        'success'
+      );
+    } catch (err) {
+      showToast('Could not change support access', err.message || 'Please try again.', 'error');
+    } finally {
+      setSupportBusy(false);
+    }
+  };
+
+  const card = { background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius-md)', padding: '16px', marginBottom: '16px' };
+  const heading = { fontSize: '14px', fontWeight: '800', marginBottom: '12px' };
+  const muted = { fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 };
+  const access = tenantInfo?.access;
+  const supportUntil = tenantInfo?.supportAccessUntil ? new Date(tenantInfo.supportAccessUntil) : null;
+
+  return (
+    <div>
+      <header className="app-header">
+        <div className="header-left">
+          <button className="back-btn" onClick={() => navigateTo('#settings')} style={{ cursor: 'pointer' }}>
+            <Icons.Back />
+          </button>
+          <h1 style={{ fontSize: '18px' }}>Company</h1>
+        </div>
+      </header>
+
+      <div style={{ paddingTop: '10px', textAlign: 'left', paddingBottom: '80px' }}>
+        <div style={card}>
+          <h3 style={heading}>Subscription</h3>
+          {!tenantInfo ? (
+            <div style={muted}>Loading...</div>
+          ) : (
+            <div style={{ display: 'grid', gap: '6px', fontSize: '13px' }}>
+              <div><strong>{tenantInfo.name}</strong> <span style={muted}>(company code {tenantInfo.code})</span></div>
+              <div>Status: <strong>{STATE_LABELS[access?.state] || access?.state}</strong>{access?.endsOn ? <span style={muted}> - until {access.endsOn}</span> : null}</div>
+              {tenantInfo.plan && <div>Plan: <strong>{tenantInfo.plan.name}</strong></div>}
+              {access?.message && <div style={muted}>{access.message}</div>}
+              <div style={muted}>For renewals or plan changes, contact Mill Mate.</div>
+            </div>
+          )}
+        </div>
+
+        <form onSubmit={handleSave} style={card}>
+          <h3 style={heading}>Purchase order details</h3>
+          <div style={{ ...muted, marginBottom: '12px' }}>
+            These addresses appear as Bill To / Ship To on POs. Ship To choices are the addresses in the same group as the Bill To.
+            {usingBuiltIn && ' You are using the original built-in addresses; saving this form makes them editable.'}
+          </div>
+
+          {addresses.map((a, i) => (
+            <div key={i} style={{ border: '1px dashed var(--border-color)', borderRadius: '10px', padding: '12px', marginBottom: '10px' }}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <div className="form-group" style={{ flex: '1 1 150px', marginBottom: '8px' }}>
+                  <label>Name</label>
+                  <input className="form-control" value={a.name} onChange={e => updateAddress(i, 'name', e.target.value)} placeholder="e.g. Factory" required maxLength={80} />
+                </div>
+                <div className="form-group" style={{ flex: '1 1 150px', marginBottom: '8px' }}>
+                  <label>Group</label>
+                  <input className="form-control" value={a.group} onChange={e => updateAddress(i, 'group', e.target.value)} placeholder="e.g. Unit 1" maxLength={80} />
+                </div>
+              </div>
+              <div className="form-group" style={{ marginBottom: '8px' }}>
+                <label>Address lines (one per line)</label>
+                <textarea className="form-control" rows={4} value={a.lines} onChange={e => updateAddress(i, 'lines', e.target.value)} required style={{ resize: 'vertical' }} />
+              </div>
+              <button type="button" className="btn-outline" onClick={() => setAddresses(prev => prev.filter((_, j) => j !== i))} style={{ width: 'auto', padding: '6px 12px', fontSize: '12px', color: 'var(--status-red)' }}>Remove</button>
+            </div>
+          ))}
+          <button type="button" className="btn-outline" onClick={() => setAddresses(prev => [...prev, { name: '', group: '', lines: '' }])} style={{ width: 'auto', padding: '8px 14px', fontSize: '13px', marginBottom: '16px' }}>+ Add address</button>
+
+          <div className="form-group">
+            <label>Authorized signatory on POs</label>
+            <input className="form-control" value={poSignatory} onChange={e => setPoSignatory(e.target.value)} placeholder="Name printed under Authorized Signatory" maxLength={80} />
+          </div>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <div className="form-group" style={{ flex: '1 1 150px' }}>
+              <label>GSTIN</label>
+              <input className="form-control" value={gstin} onChange={e => setGstin(e.target.value.toUpperCase())} placeholder="15 characters" maxLength={15} />
+            </div>
+            <div className="form-group" style={{ flex: '1 1 150px' }}>
+              <label>Office phone</label>
+              <input className="form-control" value={phone} onChange={e => setPhone(e.target.value)} maxLength={20} />
+            </div>
+          </div>
+          <div className="form-group">
+            <label>Office email</label>
+            <input className="form-control" type="email" value={email} onChange={e => setEmail(e.target.value)} maxLength={120} />
+          </div>
+          <div className="form-group">
+            <label>Extra daily summary WhatsApp numbers</label>
+            <input className="form-control" value={summaryRecipients} onChange={e => setSummaryRecipients(e.target.value)} placeholder="e.g. 9876543210, 9123456789" />
+            <div style={{ ...muted, marginTop: '4px' }}>Admins with a phone number already get the 9 AM summary. Add other numbers here, separated by commas.</div>
+          </div>
+          <button type="submit" className="btn-orange" disabled={saving} style={{ width: '100%', padding: '12px' }}>{saving ? 'Saving...' : 'Save company details'}</button>
+        </form>
+
+        {!tenantInfo?.isSupportSession && (
+          <div style={card}>
+            <h3 style={heading}>Mill Mate support access</h3>
+            <div style={{ ...muted, marginBottom: '12px' }}>
+              Allow Mill Mate support to open your app to help you. It switches off by itself, and every support visit is recorded.
+            </div>
+            {supportUntil && supportUntil > new Date() ? (
+              <>
+                <div style={{ fontSize: '13px', marginBottom: '10px' }}>Allowed until <strong>{supportUntil.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</strong>.</div>
+                <button type="button" className="btn-outline" disabled={supportBusy} onClick={() => setSupport(0)} style={{ width: '100%', padding: '10px', color: 'var(--status-red)' }}>Stop support access now</button>
+              </>
+            ) : (
+              <button type="button" className="btn-outline" disabled={supportBusy} onClick={() => setSupport(24)} style={{ width: '100%', padding: '10px' }}>Allow support for 24 hours</button>
+            )}
           </div>
         )}
       </div>
