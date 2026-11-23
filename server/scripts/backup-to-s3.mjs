@@ -1,5 +1,5 @@
-// Takes a consistent snapshot of the SQLite database and uploads it (gzipped) to
-// s3://$S3_BUCKET/backups/. Run it on a schedule (see deploy/ec2/millmate-backup.timer).
+// Takes a consistent snapshot of every Mill Mate database (each company + the
+// Console's platform.db) and uploads them (gzipped) to s3://$S3_BUCKET/backups/. Run it on a schedule (see deploy/ec2/millmate-backup.timer).
 //
 //   node scripts/backup-to-s3.mjs
 //
@@ -23,29 +23,46 @@ if (!s3Enabled) {
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = process.env.DB_PATH || path.join(here, '..', 'data', 'alagiri.db');
-const tmpFile = path.join(os.tmpdir(), `alagiri-backup-${process.pid}.db`);
+const dataRoot = path.dirname(dbPath);
+const tenantsDir = process.env.TENANT_DATA_DIR || path.join(dataRoot, 'tenants');
+const platformPath = process.env.PLATFORM_DB_PATH || path.join(dataRoot, 'platform.db');
+const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
 
-try {
-  // VACUUM INTO writes a complete, consistent copy even while the server is running.
-  const db = new DatabaseSync(dbPath);
-  db.exec(`VACUUM INTO '${tmpFile.replace(/'/g, "''")}'`);
-  db.close();
-
-  const compressed = zlib.gzipSync(fs.readFileSync(tmpFile));
-  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
-  const key = `backups/alagiri-${stamp}.db.gz`;
-
-  await getS3Client().send(new PutObjectCommand({
-    Bucket: getBucket(),
-    Key: key,
-    Body: compressed,
-    ContentType: 'application/gzip',
-    ServerSideEncryption: 'AES256'
-  }));
-  console.log(`Backup uploaded: s3://${getBucket()}/${key} (${(compressed.length / 1024).toFixed(0)} KB)`);
-} catch (err) {
-  console.error('Backup failed:', err);
-  process.exitCode = 1;
-} finally {
-  fs.rmSync(tmpFile, { force: true });
+// What to back up: the original company (same S3 key as always), every other
+// company's database, and the Console's platform.db.
+const targets = [{ file: dbPath, key: `backups/alagiri-${stamp}.db.gz` }];
+if (fs.existsSync(tenantsDir)) {
+  for (const name of fs.readdirSync(tenantsDir)) {
+    if (/^[a-z][a-z0-9]{2,19}\.db$/.test(name)) {
+      targets.push({ file: path.join(tenantsDir, name), key: `backups/tenants/${name.replace(/\.db$/, '')}-${stamp}.db.gz` });
+    }
+  }
 }
+if (fs.existsSync(platformPath)) targets.push({ file: platformPath, key: `backups/platform-${stamp}.db.gz` });
+
+let failed = 0;
+for (const { file, key } of targets) {
+  const tmpFile = path.join(os.tmpdir(), `millmate-backup-${process.pid}-${path.basename(file)}`);
+  try {
+    // VACUUM INTO writes a complete, consistent copy even while the server is running.
+    const db = new DatabaseSync(file);
+    db.exec(`VACUUM INTO '${tmpFile.replace(/'/g, "''")}'`);
+    db.close();
+
+    const compressed = zlib.gzipSync(fs.readFileSync(tmpFile));
+    await getS3Client().send(new PutObjectCommand({
+      Bucket: getBucket(),
+      Key: key,
+      Body: compressed,
+      ContentType: 'application/gzip',
+      ServerSideEncryption: 'AES256'
+    }));
+    console.log(`Backup uploaded: s3://${getBucket()}/${key} (${(compressed.length / 1024).toFixed(0)} KB)`);
+  } catch (err) {
+    failed += 1;
+    console.error(`Backup failed for ${file}:`, err);
+  } finally {
+    fs.rmSync(tmpFile, { force: true });
+  }
+}
+if (failed) process.exitCode = 1;

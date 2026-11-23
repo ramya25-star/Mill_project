@@ -73,17 +73,19 @@ export const parseUpload = (dataUrl, name) => {
 };
 
 // The default company keeps the original "uploads/..." keys; every other
-// company's files live under "t/<code>/uploads/..." so they never mix.
-const REF = /^s3:((?:t\/[a-z0-9]{3,20}\/)?uploads\/\d{4}\/\d{2}\/[0-9a-f-]{36}\.[a-z0-9]{2,4})$/;
+// company's files live under "uploads/t/<code>/..." so they never mix (and
+// stay inside the uploads/ prefix the server's AWS permission allows).
+const REF = /^s3:(uploads\/(?:t\/[a-z0-9]{3,20}\/)?\d{4}\/\d{2}\/[0-9a-f-]{36}\.[a-z0-9]{2,4})$/;
 
 const tenantPrefix = (code = currentTenantCode()) => (isDefaultTenant(code) ? '' : `t/${code.toLowerCase()}/`);
+const LEGACY_KEY = /^uploads\/\d{4}\//;
 
 // True when a stored file reference belongs to the current company.
 export const refBelongsToTenant = (ref, code = currentTenantCode()) => {
   const key = keyFromRef(ref);
   if (!key) return false;
   const prefix = tenantPrefix(code);
-  return prefix ? key.startsWith(prefix) : key.startsWith('uploads/');
+  return prefix ? key.startsWith(`uploads/${prefix}`) : LEGACY_KEY.test(key);
 };
 
 export const keyFromRef = (ref) => {
@@ -93,7 +95,7 @@ export const keyFromRef = (ref) => {
 
 export const uploadFile = async ({ buffer, ext, contentType }) => {
   const now = new Date();
-  const key = `${tenantPrefix()}uploads/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}/${crypto.randomUUID()}.${ext}`;
+  const key = `uploads/${tenantPrefix()}${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}/${crypto.randomUUID()}.${ext}`;
   await getS3Client().send(new PutObjectCommand({
     Bucket: S3_BUCKET,
     Key: key,
@@ -114,14 +116,14 @@ export const saveMediaBuffer = async ({ buffer, mimeType, filename }) => {
   }
 
   // Local fallback storage
-  const uploadDir = path.join(__dirname, 'data', ...tenantPrefix().split('/').filter(Boolean), 'uploads');
+  const uploadDir = path.join(__dirname, 'data', 'uploads', ...tenantPrefix().split('/').filter(Boolean));
   if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
   }
   const savedFilename = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${cleanExt}`;
   const filePath = path.join(uploadDir, savedFilename);
   fs.writeFileSync(filePath, buffer);
-  return `local:${tenantPrefix()}uploads/${savedFilename}`;
+  return `local:uploads/${tenantPrefix()}${savedFilename}`;
 };
 
 // Short-lived link the browser can open directly; the bucket itself stays private.

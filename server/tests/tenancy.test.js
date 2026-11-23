@@ -204,7 +204,7 @@ test('WhatsApp replies on the shared number go back to the right company', async
 });
 
 test('stored files are separated per company', () => {
-  const ref = 's3:t/xyzmills/uploads/2026/11/0f8fad5b-d9cb-469f-a165-70867728950e.jpg';
+  const ref = 's3:uploads/t/xyzmills/2026/11/0f8fad5b-d9cb-469f-a165-70867728950e.jpg';
   const legacyRef = 's3:uploads/2026/11/0f8fad5b-d9cb-469f-a165-70867728950e.jpg';
   assert.equal(storage.refBelongsToTenant(ref, 'XYZMILLS'), true);
   assert.equal(storage.refBelongsToTenant(ref, 'ALAGIRI'), false);
