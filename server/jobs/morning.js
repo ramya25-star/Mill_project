@@ -204,8 +204,17 @@ export async function runMorningJobs({ force = false, now = new Date() } = {}) {
     return isNaN(t) || now.getTime() - t <= FOURTEEN_DAYS_MS;
   }).length;
 
+  // "Requested orders" on the app's Home: new requests waiting for approval, plus
+  // orders rejected after a PO that went back to Requested Orders to be re-placed.
+  const requestedCount = orders.filter(o => {
+    const s = o.status || o.data?.status;
+    const d = o.data || {};
+    return s === 'Pending' || (s === 'Rejected' && (d.poNumber || o.poNumber) && d.rejectedFrom !== 'RequestedOrders');
+  }).length;
+
   const summaryStats = {
-    // What the WhatsApp summary shows (same as the app's tabs)
+    // What the WhatsApp summary shows (same as the app's Home and tabs)
+    requested: requestedCount,
     noResponse: countStatus('No Response'),
     acknowledged: countStatus('Acknowledged'),
     bookedStatus: countStatus('Booked'),

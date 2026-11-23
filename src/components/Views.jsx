@@ -3170,13 +3170,17 @@ function StatusFilterButton({ tab, count, isActive, onClick, gridColumn }) {
       }}>
         {tab}
       </span>
-      <span style={{ 
-        fontSize: '10px', 
-        background: isActive ? (isDelayed ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.25)') : `${statusColor}22`, 
-        color: isActive ? (isDelayed ? '#000000' : '#ffffff') : statusColor, 
-        padding: '1px 7px', 
-        borderRadius: '10px', 
-        fontWeight: '800',
+      <span style={{
+        fontSize: '14px', // was 10px: hard to read at a glance
+        lineHeight: '1.2',
+        minWidth: '26px',
+        textAlign: 'center',
+        background: isActive ? (isDelayed ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.25)') : `${statusColor}22`,
+        // yellow on pale yellow was too faint for Delayed, so use its dark text colour
+        color: isActive ? (isDelayed ? '#000000' : '#ffffff') : (isDelayed ? '#855D00' : statusColor),
+        padding: '2px 8px',
+        borderRadius: '10px',
+        fontWeight: '900',
         transition: 'all 0.25s'
       }}>
         {count}
@@ -3718,15 +3722,17 @@ export function OrderDetailsView({ state, navigateTo, goBack, requestId, addNoti
     }
   };
 
-  const handleStatusChange = async (newStatus, remarks = "", proofOfReceipt = null, proofOfReceiptName = "", lrData = null, lrName = "", newDispatchDate = null, storageLocation = "") => {
+  const handleStatusChange = async (newStatus, remarks = "", proofOfReceipt = null, proofOfReceiptName = "", lrData = null, lrName = "", newDispatchDate = null, storageLocation = "", storagePhoto = null, storagePhotoName = "") => {
     if (!newStatus) return;
     const prevStatus = req.status;
 
     let storedProof = null;
     let storedLr = null;
+    let storedStoragePhoto = null;
     try {
       if (proofOfReceipt) storedProof = await apiService.storeFile(proofOfReceipt, proofOfReceiptName || "proof.jpg");
       if (lrData) storedLr = await apiService.storeFile(lrData, lrName || "lr-copy.pdf");
+      if (storagePhoto) storedStoragePhoto = await apiService.storeFile(storagePhoto, storagePhotoName || "storage-photo.jpg");
     } catch (err) {
       state.showToast("Upload Failed", err.message || "Could not upload the file. Please try again.", "success");
       return false;
@@ -3738,6 +3744,9 @@ export function OrderDetailsView({ state, navigateTo, goBack, requestId, addNoti
     }
     if (newStatus === "Received" && storageLocation) {
       remarksStr += ` Material stored in: "${storageLocation.trim()}".`;
+    }
+    if (newStatus === "Received" && storedStoragePhoto) {
+      remarksStr += ` Storage photo attached.`;
     }
     if (remarks) {
       remarksStr += ` Remarks: ${remarks}`;
@@ -3765,6 +3774,8 @@ export function OrderDetailsView({ state, navigateTo, goBack, requestId, addNoti
       ...(newStatus === "Received" ? {
         storageLocation: (storageLocation || req.storageLocation || "").trim(),
         materialStoredIn: (storageLocation || req.materialStoredIn || "").trim(),
+        storagePhoto: storedStoragePhoto || req.storagePhoto || null,
+        storagePhotoName: storedStoragePhoto ? (storagePhotoName || "storage-photo.jpg") : (req.storagePhotoName || ""),
         actualDeliveryDate: req.status === "Received" && req.actualDeliveryDate ? req.actualDeliveryDate : new Date().toISOString()
       } : {})
     };
@@ -4054,6 +4065,30 @@ export function OrderDetailsView({ state, navigateTo, goBack, requestId, addNoti
   const renderMaterialStoredInModal = () => {
     let locationInput = "";
     let remarksInput = "";
+    // Optional photo of where the material is stored.
+    let photoData = null;
+    let photoName = "";
+    let photoBusy = false;
+
+    const handleStoragePhoto = async (e) => {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = ""; // allow picking the same file again
+      if (!file) return;
+      if (file.size > MAX_UPLOAD_BYTES) {
+        state.showToast("File Too Large", "Please choose a photo smaller than 10 MB.", "success");
+        return;
+      }
+      photoBusy = true;
+      updateModal();
+      try {
+        photoData = await readFileForUpload(file);
+        photoName = file.name || `Storage_${Date.now()}.jpg`;
+      } catch {
+        state.showToast("Photo Error", "Could not read that photo. Please try again.", "success");
+      }
+      photoBusy = false;
+      updateModal();
+    };
 
     const updateModal = (err = "") => {
       setModalContent(
@@ -4078,6 +4113,37 @@ export function OrderDetailsView({ state, navigateTo, goBack, requestId, addNoti
               <div style={{ color: 'var(--status-red)', fontSize: '12px', fontWeight: '600', marginTop: '6px' }}>
                 {err}
               </div>
+            )}
+          </div>
+
+          <div className="form-group" style={{ marginBottom: '16px' }}>
+            <label style={{ fontSize: '13px', fontWeight: '700', display: 'block', marginBottom: '6px', color: 'var(--text-main)' }}>
+              Photo of storage place <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)' }}>(optional)</span>
+            </label>
+            {photoData ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <img src={photoData} alt="Storage place" style={{ width: '72px', height: '72px', objectFit: 'cover', borderRadius: '8px', border: '1px solid var(--border-color)' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--primary-orange)', cursor: 'pointer' }}>
+                    Change photo
+                    <input type="file" accept="image/*" onChange={handleStoragePhoto} style={{ display: 'none' }} />
+                  </label>
+                  <button type="button" onClick={() => { photoData = null; photoName = ""; updateModal(); }}
+                    style={{ background: 'none', border: 'none', padding: 0, textAlign: 'left', fontSize: '12px', fontWeight: '700', color: 'var(--status-red)', cursor: 'pointer' }}>
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <label style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                border: '1.5px dashed var(--border-color)', borderRadius: '8px', padding: '12px',
+                fontSize: '13px', fontWeight: '700', color: 'var(--text-main)', cursor: photoBusy ? 'default' : 'pointer', opacity: photoBusy ? 0.6 : 1
+              }}>
+                <Icons.Upload size={16} />
+                {photoBusy ? 'Adding photo...' : 'Take or choose a photo'}
+                <input type="file" accept="image/*" disabled={photoBusy} onChange={handleStoragePhoto} style={{ display: 'none' }} />
+              </label>
             )}
           </div>
 
@@ -4118,6 +4184,7 @@ export function OrderDetailsView({ state, navigateTo, goBack, requestId, addNoti
               className="btn-orange" 
               onClick={() => {
                 const trimmedLoc = (locationInput || "").trim();
+                if (photoBusy) return;
                 if (!trimmedLoc) {
                   updateModal("Storage location is required.");
                   return;
@@ -4131,7 +4198,9 @@ export function OrderDetailsView({ state, navigateTo, goBack, requestId, addNoti
                   null,
                   "",
                   null,
-                  trimmedLoc
+                  trimmedLoc,
+                  photoData,
+                  photoName
                 );
               }}
               style={{ flex: 1, cursor: 'pointer', padding: '10px 16px', fontSize: '13px', fontWeight: '700' }}
@@ -4412,6 +4481,16 @@ export function OrderDetailsView({ state, navigateTo, goBack, requestId, addNoti
                 Material stored in: <span style={{ color: 'var(--primary-orange)' }}>{req.storageLocation || req.materialStoredIn}</span>
               </div>
             </div>
+            {req.storagePhoto && (
+              <button
+                type="button"
+                onClick={() => { setModalContent(<StoredImage value={req.storagePhoto} style={{ maxWidth: '100%', borderRadius: '8px' }} alt="Storage place" />, "Storage Photo"); openModal(); }}
+                title="View storage photo"
+                style={{ marginLeft: 'auto', padding: 0, border: 'none', background: 'none', cursor: 'pointer', flexShrink: 0 }}
+              >
+                <StoredImage value={req.storagePhoto} style={{ width: '56px', height: '56px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #86efac' }} alt="Storage place" />
+              </button>
+            )}
           </div>
         )}
 

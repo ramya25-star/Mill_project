@@ -20,6 +20,7 @@ const {
   sendOverdue,
   sendDatePending,
   sendDailySummary,
+  buildDailySummaryParams,
   sendAvailabilityRequest,
   generateSignedPoUrl,
   isAvailabilityEnabled
@@ -1153,12 +1154,24 @@ async function run() {
       add('Received', { actualDeliveryDate: new Date().toISOString() });
       add('Received', { actualDeliveryDate: new Date(Date.now() - 30 * 86400000).toISOString() }); // too old: not counted
       add('Delayed'); add('Delayed');
-      add('Pending'); // a request, not a live order
+      add('Pending'); // a new request: Requested
+      add('Rejected', { poNumber: 'PO-S13-R', rejectedFrom: 'LiveOrders' }); // rejected after PO: back in Requested
+      add('Rejected', { rejectedFrom: 'RequestedOrders' }); // rejected request: not Requested
       const after = (await runMorningJobs({ force: true })).summaryStats;
       const diff = (k) => after[k] - before[k];
-      const passedS13 = diff('noResponse') === 2 && diff('acknowledged') === 1 && diff('bookedStatus') === 3 && diff('received') === 1 && diff('delayed') === 2;
-      record('Test S13: Daily summary lines match the app tabs (No Response, Acknowledged, Booked, Received 14d, Delayed)', passedS13,
-        passedS13 ? '' : JSON.stringify({ noResponse: diff('noResponse'), acknowledged: diff('acknowledged'), booked: diff('bookedStatus'), received: diff('received'), delayed: diff('delayed') }));
+
+      // Template variables: old template = 6, template with a Requested line = 7
+      const sample = { requested: 9, noResponse: 1, acknowledged: 2, bookedStatus: 3, received: 4, delayed: 5 };
+      delete process.env.META_SUMMARY_WITH_REQUESTED;
+      const oldParams = buildDailySummaryParams('Test', sample).map(p => p.text).join(',');
+      process.env.META_SUMMARY_WITH_REQUESTED = '1';
+      const newParams = buildDailySummaryParams('Test', sample).map(p => p.text).join(',');
+      delete process.env.META_SUMMARY_WITH_REQUESTED;
+
+      const passedS13 = diff('requested') === 2 && diff('noResponse') === 2 && diff('acknowledged') === 1 && diff('bookedStatus') === 3 && diff('received') === 1 && diff('delayed') === 2
+        && oldParams === 'Test,1,2,3,4,5' && newParams === 'Test,9,1,2,3,4,5';
+      record('Test S13: Daily summary matches the app (Requested incl. rejected-after-PO, No Response, Acknowledged, Booked, Received 14d, Delayed; 6 or 7 template vars)', passedS13,
+        passedS13 ? '' : JSON.stringify({ requested: diff('requested'), oldParams, newParams, noResponse: diff('noResponse'), acknowledged: diff('acknowledged'), booked: diff('bookedStatus'), received: diff('received'), delayed: diff('delayed') }));
       for (const id of ids) db.prepare('DELETE FROM requests WHERE id = ?').run(id);
     } catch (err) {
       record('Test S13: Daily summary matches app tabs', false, err.message);

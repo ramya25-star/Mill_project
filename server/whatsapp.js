@@ -603,6 +603,24 @@ export const sendText = async (to, text, { replyToWamid, orderId, requestId } = 
 
 // 7b. sendDailySummary: META_SUMMARY_TEMPLATE_NAME with 6 body variables:
 // {{1}} first name, {{2}} live orders, {{3}} awaiting dispatch date, {{4}} booked, {{5}} overdue, {{6}} rejected
+// The numbers for the daily_summary template, in the template's line order:
+// {{1}} name, [Requested], No Response, Acknowledged, Booked, Received, Delayed.
+// META_SUMMARY_WITH_REQUESTED=1 is for a template that has the "Requested" line
+// (7 variables); without it, the older 6-variable template.
+export const buildDailySummaryParams = (firstName, stats = {}) => {
+  const withRequested = process.env.META_SUMMARY_WITH_REQUESTED === '1';
+  const values = [
+    firstName || 'User',
+    ...(withRequested ? [stats.requested ?? 0] : []),
+    stats.noResponse ?? 0,
+    stats.acknowledged ?? 0,
+    stats.bookedStatus ?? 0,
+    stats.received ?? 0,
+    stats.delayed ?? 0
+  ];
+  return values.map(v => ({ type: 'text', text: String(v) }));
+};
+
 export const sendDailySummary = async (to, firstName, stats = {}, { trigger = 'daily_summary' } = {}) => {
   const templateName = process.env.META_SUMMARY_TEMPLATE_NAME;
   if (!templateName) throw new Error('META_SUMMARY_TEMPLATE_NAME is not set in server/.env.');
@@ -613,20 +631,7 @@ export const sendDailySummary = async (to, firstName, stats = {}, { trigger = 'd
   const langCode = process.env.META_TEMPLATE_LANGUAGE;
   if (!langCode) throw new Error('META_TEMPLATE_LANGUAGE is not configured in server/.env.');
 
-  const components = [
-    {
-      type: 'body',
-      parameters: [
-        // Template lines: {{1}} name, then No Response, Acknowledged, Booked, Received, Delayed
-        { type: 'text', text: String(firstName || 'User') },
-        { type: 'text', text: String(stats.noResponse ?? 0) },
-        { type: 'text', text: String(stats.acknowledged ?? 0) },
-        { type: 'text', text: String(stats.bookedStatus ?? 0) },
-        { type: 'text', text: String(stats.received ?? 0) },
-        { type: 'text', text: String(stats.delayed ?? 0) }
-      ]
-    }
-  ];
+  const components = [{ type: 'body', parameters: buildDailySummaryParams(firstName, stats) }];
 
   const wamid = await sendTemplate(cleanTo, templateName, components, { language: langCode, trigger });
   return { wamid, to: cleanTo };
