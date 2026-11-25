@@ -75,6 +75,22 @@ const useAction = () => {
 
 const can = (me, permission) => (me?.permissions || []).includes(permission);
 
+// QR code for the authenticator app. Drawn in the browser, so the secret is
+// never sent to any QR service. Typing the key stays available as a fallback.
+function SetupQr({ url }) {
+  const [src, setSrc] = useState('');
+  useEffect(() => {
+    let alive = true;
+    import('qrcode')
+      .then(QR => QR.toDataURL(url, { width: 200, margin: 2, errorCorrectionLevel: 'M', color: { dark: '#000000', light: '#ffffff' } }))
+      .then(data => { if (alive) setSrc(data); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [url]);
+  if (!src) return null;
+  return <img className="c-qr" src={src} width="200" height="200" alt="QR code to add Mill Mate Console to your authenticator app" />;
+}
+
 // ---------------------------------------------------------------------------
 // Sign in (password, then authenticator code; first time: set it up)
 // ---------------------------------------------------------------------------
@@ -125,7 +141,11 @@ function Login({ onSignedIn, notice }) {
           <>
             <div className="c-small">
               <strong>Set up the authenticator (one time).</strong> Open Google Authenticator or Microsoft Authenticator on your phone,
-              choose <em>Add account → Enter a setup key</em>, and type this key (time-based):
+              tap <em>+ → Scan a QR code</em>, and scan this:
+            </div>
+            {setup.otpauthUrl && <SetupQr url={setup.otpauthUrl} />}
+            <div className="c-small c-muted">
+              Can't scan? Choose <em>Enter a setup key</em> instead and type this key (time-based):
             </div>
             <div className="c-secret">{setup.secret.match(/.{1,4}/g).join(' ')}</div>
             <div className="c-small c-muted">Account name: Mill Mate Console ({username}). Then enter the 6-digit code it shows.</div>

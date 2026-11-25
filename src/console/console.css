@@ -206,6 +206,7 @@ table.c-table-wide { min-width: 720px; }
 .c-login h1 { font-size: 18px; margin: 10px 0 4px; }
 
 .c-secret { font-family: ui-monospace, Consolas, monospace; font-size: 15px; letter-spacing: 0.08em; background: var(--surface-2); border: 1px dashed var(--border); border-radius: 8px; padding: 10px; overflow-wrap: anywhere; text-align: center; }
+.c-qr { display: block; margin: 0 auto; width: 200px; height: 200px; background: #ffffff; padding: 6px; border-radius: 10px; box-sizing: content-box; image-rendering: pixelated; }
 
 .c-toast { position: fixed; right: 16px; bottom: 16px; max-width: min(380px, calc(100vw - 32px)); z-index: 50; }
 
