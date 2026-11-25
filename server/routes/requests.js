@@ -78,13 +78,10 @@ router.put('/:id', (req, res) => {
   const hasDispatchUpdate = hasDispatchCol || hasExpectedCol;
   let dispatchDate = existing.dispatch_date || requestData.dispatch_date || requestData.expectedDispatchDate || null;
   if (hasDispatchUpdate) {
-    if (hasDispatchCol && hasExpectedCol) {
-      dispatchDate = req.body.expectedDispatchDate !== existing.dispatch_date
-        ? (req.body.expectedDispatchDate || null)
-        : (req.body.dispatch_date || null);
-    } else {
-      dispatchDate = (hasDispatchCol ? req.body.dispatch_date : req.body.expectedDispatchDate) || null;
-    }
+    // The app edits expectedDispatchDate; dispatch_date in a saved order is only
+    // an echo of what it last loaded. Preferring the echo used to put an edited
+    // date back to the old one on the next save (e.g. a status change).
+    dispatchDate = (hasExpectedCol ? req.body.expectedDispatchDate : req.body.dispatch_date) || null;
     requestData.dispatch_date = dispatchDate;
     requestData.expectedDispatchDate = dispatchDate;
   }

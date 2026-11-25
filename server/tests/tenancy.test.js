@@ -368,3 +368,22 @@ test('a company without saved addresses never gets the built-in Alagiri addresse
   const po = poDataFromOrder({ id: 'R1', billTo: 'XYZ PAPER MILL' }, {}, 'Ravi', []);
   assert.ok(!JSON.stringify(po).toUpperCase().includes('ALAGIRI'), JSON.stringify(po.billTo));
 });
+
+test('an edited dispatch date stays after the next save of the order', async () => {
+  const token = (await call('/auth/login', { method: 'POST', body: { username: 'admin', password: 'Password123!' } })).json.token;
+  const id = `REQ-DATE-${Date.now()}`;
+  const created = await call('/requests', { method: 'POST', token, body: { id, productName: 'Bolt', status: 'No Response', poNumber: 'PO-DATE-1', expectedDispatchDate: '2026-12-01' } });
+  assert.equal(created.status, 201);
+  const loaded = (await call('/requests', { token })).json.find(r => r.id === id);
+  assert.equal(loaded.dispatch_date, '2026-12-01');
+  // Edit the date: the app sends its loaded copy (old dispatch_date echo) with the new expectedDispatchDate.
+  const edited = await call(`/requests/${id}`, { method: 'PUT', token, body: { ...loaded, expectedDispatchDate: '2026-12-10' } });
+  assert.equal(edited.json.expectedDispatchDate, '2026-12-10');
+  // A later save (status change) from a copy that still carries the old echo must not undo the edit.
+  const later = await call(`/requests/${id}`, { method: 'PUT', token, body: { ...loaded, expectedDispatchDate: '2026-12-10', status: 'Acknowledged' } });
+  assert.equal(later.json.expectedDispatchDate, '2026-12-10');
+  assert.equal(later.json.dispatch_date, '2026-12-10');
+  // Saves that don't mention the date keep it.
+  const noDate = await call(`/requests/${id}`, { method: 'PUT', token, body: { status: 'Booked' } });
+  assert.equal(noDate.json.expectedDispatchDate, '2026-12-10');
+});

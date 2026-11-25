@@ -2,6 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { apiService, isStoredFile, cacheCurrentUser, getCompanyCode } from '../services/api';
 import { CONFIG, COMPANY_ADDRESSES, COMPANY_OPTIONS, BILL_TO_OPTIONS, getShipToOptions, getCompanyAddress, getPoSignatory, getAddressBook } from '../config';
+import SearchSelect from './SearchSelect';
+
+const UNIT_OPTIONS = ['Pieces', 'Kg', 'Litre', 'Box', 'Meter', 'Nos', 'Feet', 'Length'];
+const toOptions = (list) => list.map(v => ({ value: v, label: v }));
+// Suppliers can be found by name, contact person, phone or what they supply.
+const supplierSearchText = (s) => [s.contactPerson, s.whatsappNumber, s.phoneNumber, s.products].filter(Boolean).join(' ');
 
 // ----------------------------------------------------
 // ICON CONSTANTS (Reusable clean SVG vectors)
@@ -1255,25 +1261,18 @@ export function CreateRequestView({ state, navigateTo, goBack, addNotification, 
                 </div>
                 <div className="form-group">
                   <label>Units</label>
-                  <select 
-                    className="form-control" 
-                    value={prod.units} 
-                    onChange={e => {
-                      updateProduct(index, "units", e.target.value);
-                      validateProductField(index, "units", e.target.value);
-                    }} 
-                    style={{ cursor: 'pointer', border: errors[`units_${index}`] ? '1.5px solid var(--status-red)' : '1px solid var(--border-color)', color: !prod.units ? 'var(--text-muted)' : 'inherit' }}
-                  >
-                    <option value="" disabled>Select unit</option>
-                    <option value="Pieces">Pieces</option>
-                    <option value="Kg">Kg</option>
-                    <option value="Litre">Litre</option>
-                    <option value="Box">Box</option>
-                    <option value="Meter">Meter</option>
-                    <option value="Nos">Nos</option>
-                    <option value="Feet">Feet</option>
-                    <option value="Length">Length</option>
-                  </select>
+                  <SearchSelect
+                    value={prod.units}
+                    onChange={v => {
+                      updateProduct(index, "units", v);
+                      validateProductField(index, "units", v);
+                    }}
+                    options={toOptions(UNIT_OPTIONS)}
+                    placeholder="Select unit"
+                    searchPlaceholder="Search unit..."
+                    invalid={!!errors[`units_${index}`]}
+                    ariaLabel="Units"
+                  />
                   {errors[`units_${index}`] && <div style={{ color: 'var(--status-red)', fontSize: '11px', marginTop: '4px', textAlign: 'left' }}>{errors[`units_${index}`]}</div>}
                 </div>
               </div>
@@ -1358,28 +1357,30 @@ export function CreateRequestView({ state, navigateTo, goBack, addNotification, 
           {!isManualSupplier ? (
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label>Choose Supplier</label>
-              <select className="form-control" value={suggestedSupplier} onChange={e => {
-                const name = e.target.value;
-                if (name === "__MANUAL__") {
-                  setIsManualSupplier(true);
-                  setSuggestedSupplier("");
-                  setSuggestedSupplierPhone("");
-                } else {
-                  setSuggestedSupplier(name);
-                  const s = state.suppliers.find(sup => sup.companyName === name);
-                  if (s) {
-                    setSuggestedSupplierPhone(s.whatsappNumber || s.phoneNumber || "");
-                  } else {
+              <SearchSelect
+                value={suggestedSupplier}
+                onChange={(name, typed) => {
+                  if (name === "__MANUAL__") {
+                    setIsManualSupplier(true);
+                    // Carry over what was typed in the search, so it isn't typed twice.
+                    setSuggestedSupplier(typed || "");
                     setSuggestedSupplierPhone("");
+                  } else {
+                    setSuggestedSupplier(name);
+                    const s = state.suppliers.find(sup => sup.companyName === name);
+                    setSuggestedSupplierPhone(s ? (s.whatsappNumber || s.phoneNumber || "") : "");
                   }
-                }
-              }} style={{ cursor: 'pointer' }}>
-                <option value="">Choose Supplier (Optional)</option>
-                {state.suppliers.map(sup => (
-                  <option key={sup.id} value={sup.companyName}>{sup.companyName}</option>
-                ))}
-                <option value="__MANUAL__">+ Add Supplier Manually</option>
-              </select>
+                }}
+                options={[
+                  { value: "", label: "No supplier (optional)" },
+                  ...state.suppliers.map(sup => ({ value: sup.companyName, label: sup.companyName, keywords: supplierSearchText(sup), hint: sup.products || undefined }))
+                ]}
+                footerOptions={[{ value: "__MANUAL__", label: "+ Add Supplier Manually" }]}
+                placeholder="Choose Supplier (Optional)"
+                searchPlaceholder="Search supplier by name, phone or product..."
+                emptyText="No saved supplier matches. Add it manually below."
+                ariaLabel="Choose Supplier"
+              />
             </div>
           ) : (
             <>
@@ -1422,39 +1423,29 @@ export function CreateRequestView({ state, navigateTo, goBack, addNotification, 
         <div className="form-row">
           <div className="form-group">
             <label>Bill to</label>
-            <select 
-              className="form-control" 
-              value={billTo} 
-              onChange={e => handleBillToChange(e.target.value)} 
-              style={{ 
-                cursor: 'pointer',
-                borderColor: errors.billTo ? 'var(--status-red)' : undefined
-              }}
-            >
-              <option value="" disabled>Select Bill To...</option>
-              {BILL_TO_OPTIONS.map(loc => (
-                <option key={loc} value={loc}>{loc}</option>
-              ))}
-            </select>
+            <SearchSelect
+              value={billTo}
+              onChange={v => handleBillToChange(v)}
+              options={toOptions(BILL_TO_OPTIONS)}
+              placeholder="Select Bill To..."
+              searchPlaceholder="Search address..."
+              invalid={!!errors.billTo}
+              ariaLabel="Bill to"
+            />
             {errors.billTo && <div style={{ color: 'var(--status-red)', fontSize: '11px', marginTop: '4px', textAlign: 'left' }}>{errors.billTo}</div>}
           </div>
           <div className="form-group">
             <label>Ship to</label>
-            <select 
-              className="form-control" 
-              value={shipTo} 
-              onChange={e => handleShipToChange(e.target.value)} 
-              style={{ 
-                cursor: 'pointer',
-                borderColor: errors.shipTo ? 'var(--status-red)' : undefined
-              }}
+            <SearchSelect
+              value={shipTo}
+              onChange={v => handleShipToChange(v)}
+              options={toOptions(getShipToOptions(billTo))}
+              placeholder="Select Ship To..."
+              searchPlaceholder="Search address..."
+              invalid={!!errors.shipTo}
               disabled={!billTo}
-            >
-              <option value="" disabled>Select Ship To...</option>
-              {getShipToOptions(billTo).map(loc => (
-                <option key={loc} value={loc}>{loc}</option>
-              ))}
-            </select>
+              ariaLabel="Ship to"
+            />
             {errors.shipTo && <div style={{ color: 'var(--status-red)', fontSize: '11px', marginTop: '4px', textAlign: 'left' }}>{errors.shipTo}</div>}
           </div>
         </div>
@@ -2433,29 +2424,23 @@ export function RequestedOrdersView({ state, navigateTo, goBack, addNotification
                 <div className="form-row">
                   <div className="form-group">
                     <label>Bill to</label>
-                    <select 
-                      className="form-control" 
-                      value={current.billTo || BILL_TO_OPTIONS[0]} 
-                      onChange={e => handleApprovalBillToChange(req.id, e.target.value)} 
-                      style={{ cursor: 'pointer' }}
-                    >
-                      {BILL_TO_OPTIONS.map(loc => (
-                        <option key={loc} value={loc}>{loc}</option>
-                      ))}
-                    </select>
+                    <SearchSelect
+                      value={current.billTo || BILL_TO_OPTIONS[0]}
+                      onChange={v => handleApprovalBillToChange(req.id, v)}
+                      options={toOptions(BILL_TO_OPTIONS)}
+                      searchPlaceholder="Search address..."
+                      ariaLabel="Bill to"
+                    />
                   </div>
                   <div className="form-group">
                     <label>Ship to</label>
-                    <select 
-                      className="form-control" 
-                      value={current.shipTo || current.billTo || BILL_TO_OPTIONS[0]} 
-                      onChange={e => handleApprovalShipToChange(req.id, e.target.value)} 
-                      style={{ cursor: 'pointer' }}
-                    >
-                      {getShipToOptions(current.billTo || BILL_TO_OPTIONS[0]).map(loc => (
-                        <option key={loc} value={loc}>{loc}</option>
-                      ))}
-                    </select>
+                    <SearchSelect
+                      value={current.shipTo || current.billTo || BILL_TO_OPTIONS[0]}
+                      onChange={v => handleApprovalShipToChange(req.id, v)}
+                      options={toOptions(getShipToOptions(current.billTo || BILL_TO_OPTIONS[0]))}
+                      searchPlaceholder="Search address..."
+                      ariaLabel="Ship to"
+                    />
                   </div>
                 </div>
 
@@ -2605,22 +2590,24 @@ export function RequestedOrdersView({ state, navigateTo, goBack, addNotification
                         </div>
                       ) : (
                         <div>
-                          <select
-                            className="form-control"
+                          <SearchSelect
                             value={current.supplierId || ""}
-                            onChange={e => updateCardField(req.id, "supplierId", e.target.value)}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            <option value="">Choose Supplier</option>
-                            {state.suppliers.map(s => {
+                            onChange={v => updateCardField(req.id, "supplierId", v)}
+                            options={state.suppliers.map(s => {
                               const alreadyRejected = rejectedSupplierIds.includes(s.id);
-                              return (
-                                <option key={s.id} value={s.id} disabled={alreadyRejected}>
-                                  {s.companyName}{alreadyRejected ? " (rejected this order)" : ""}
-                                </option>
-                              );
+                              return {
+                                value: s.id,
+                                label: `${s.companyName}${alreadyRejected ? " (rejected this order)" : ""}`,
+                                keywords: supplierSearchText(s),
+                                hint: s.products || undefined,
+                                disabled: alreadyRejected
+                              };
                             })}
-                          </select>
+                            placeholder="Choose Supplier"
+                            searchPlaceholder="Search supplier by name, phone or product..."
+                            emptyText="No supplier matches your search."
+                            ariaLabel="Choose Supplier"
+                          />
                           {activeSupplier && (
                             <div style={{ marginTop: '8px' }}>
                               <div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', wordBreak: 'break-word' }}>
@@ -4290,12 +4277,15 @@ export function OrderDetailsView({ state, navigateTo, goBack, requestId, addNoti
                 const updatedReq = {
                   ...req,
                   expectedDispatchDate: newDateStr,
+                  dispatch_date: newDateStr,
                   status: nextStatus,
                   history: [...(req.history || []), historyEntry]
                 };
-                
-                await apiService.updateRequest(req.id, updatedReq);
-                state.setRequests(state.requests.map(r => r.id === req.id ? updatedReq : r));
+
+                const saved = await apiService.updateRequest(req.id, updatedReq);
+                // This dialog was built when it opened, so update from the latest
+                // list (prev), not the copy it captured then.
+                state.setRequests(prev => (prev || []).map(r => r.id === req.id ? (saved || updatedReq) : r));
                 
                 state.logEvent(
                   "Changed Expected Dispatch Date",
@@ -6885,11 +6875,14 @@ export function UserManagementView({ state, navigateTo, openModal, closeModal, s
           </div>
           <div className="form-group">
             <label>Department</label>
-            <select className="form-control" value={department} onChange={e => setDepartment(e.target.value)} style={{ cursor: 'pointer' }}>
-              {activeDepts.map(d => (
-                <option key={d.name} value={d.name}>{d.name}</option>
-              ))}
-            </select>
+            <SearchSelect
+              value={department}
+              onChange={v => setDepartment(v)}
+              options={activeDepts.map(d => ({ value: d.name, label: d.name }))}
+              placeholder="Select department"
+              searchPlaceholder="Search department..."
+              ariaLabel="Department"
+            />
           </div>
         </div>
 
