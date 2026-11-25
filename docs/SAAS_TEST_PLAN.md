@@ -32,7 +32,7 @@ If a step fails:
 - [ ] **1A.2** Take a fresh backup of the live data before anything changes. Run:
   `ssh -i ~/.ssh/millmate-api.pem ubuntu@api.alagiriduplex.com "sudo systemctl start millmate-backup.service && sudo journalctl -u millmate-backup -n 5 --no-pager"`
   → *Expect:* the last lines say the backup finished, with no error.
-  If the SSH connection is refused, run `.\deploy.ps1 -ServerOnly` once; it opens the firewall for your current IP. Then try again.
+  If the SSH connection is refused, run `.\scripts\check-whatsapp.ps1` once; it opens the firewall for your current IP and only reads from the server. Then try again.
 - [ ] **1A.3** Note the version running now:
   `ssh -i ~/.ssh/millmate-api.pem ubuntu@api.alagiriduplex.com "git -C /opt/millmate rev-parse --short HEAD"`
   → Write it here: `__________`. You need it if you have to go back.
