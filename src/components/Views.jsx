@@ -1974,11 +1974,9 @@ export function RequestedOrdersView({ state, navigateTo, goBack, addNotification
         return;
       }
 
+      // A supplier that rejected this order can be chosen again (e.g. they
+      // changed their mind); the list only marks them.
       const isReplacement = req.status === "Rejected";
-      if (isReplacement && getRejectedSupplierIds(req).includes(cardData.supplierId)) {
-        state.showToast("Choose Another Supplier", "This supplier already rejected this order. Please place it with a different supplier.", "success");
-        return;
-      }
 
       const user = state.currentUser;
       
@@ -2597,10 +2595,9 @@ export function RequestedOrdersView({ state, navigateTo, goBack, addNotification
                               const alreadyRejected = rejectedSupplierIds.includes(s.id);
                               return {
                                 value: s.id,
-                                label: `${s.companyName}${alreadyRejected ? " (rejected this order)" : ""}`,
+                                label: `${s.companyName}${alreadyRejected ? " (rejected this order before)" : ""}`,
                                 keywords: supplierSearchText(s),
-                                hint: s.products || undefined,
-                                disabled: alreadyRejected
+                                hint: s.products || undefined
                               };
                             })}
                             placeholder="Choose Supplier"
