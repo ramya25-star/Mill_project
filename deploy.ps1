@@ -215,7 +215,7 @@ if ($ServerOnly -or $NoAppUpdate) {
     " && sudo install -o millmate -g millmate -m 644 /tmp/millmate-latest.json $UpdatesDir/latest.json.new" +
     " && sudo mv -f $UpdatesDir/latest.json.new $UpdatesDir/latest.json" +
     " && rm -f /tmp/$zipName /tmp/millmate-latest.json" +
-    " && (ls -1t $UpdatesDir/bundle-*.zip | tail -n +6 | xargs -r sudo rm -f)"
+    " && (sudo sh -c 'ls -1t $UpdatesDir/bundle-*.zip | tail -n +6 | xargs -r rm -f')"
   $pubArgs = @('-i', $SshKey, '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ConnectTimeout=20', "$SshUser@$Domain", $publish)
   Run 'publishing the app bundle' { & ssh @pubArgs }
   Remove-Item $zipPath, $jsonPath -Force -ErrorAction SilentlyContinue
