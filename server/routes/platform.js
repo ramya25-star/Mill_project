@@ -10,7 +10,7 @@ import { asyncHandler } from '../middleware/asyncHandler.js';
 import {
   platformDb, listTenants, getTenant, getTenantRow, tenantAccess, createTenant, recordPayment, listPayments,
   listPlans, getPlan, serializePlan, audit, listAudit, newId, PlatformError, cleanContact, isDateOnly,
-  FEATURE_KEYS, LIMIT_KEYS, TENANT_STATUSES, todayIst, addDays
+  FEATURE_KEYS, LIMIT_KEYS, TENANT_STATUSES, todayIst, addDays, userLimitError
 } from '../platform.js';
 import { getTenantDb, tenantDbPath } from '../db.js';
 import { runWithTenant, normalizeTenantCode, isDefaultTenant } from '../tenantContext.js';
@@ -34,12 +34,15 @@ const fail = (res, err) => {
 // Sign-in: password, then a 6-digit authenticator code (always required).
 // -----------------------------------------------------------------------------
 const FAIL_WINDOW_MS = 15 * 60 * 1000;
+// 5 wrong tries lock one username; a whole network (shared office IP) only
+// after 30, so one person's typos do not lock everybody else out.
 const MAX_FAILS = 5;
+const MAX_FAILS_PER_IP = 30;
 const failures = new Map();
 const tooMany = (key) => {
   const e = failures.get(key);
   if (!e || Date.now() - e.first > FAIL_WINDOW_MS) { failures.delete(key); return false; }
-  return e.count >= MAX_FAILS;
+  return e.count >= (key.startsWith('ip:') ? MAX_FAILS_PER_IP : MAX_FAILS);
 };
 const noteFailure = (key) => {
   const e = failures.get(key);
@@ -103,10 +106,18 @@ router.post('/auth/login', asyncHandler(async (req, res) => {
 router.post('/auth/setup-2fa', (req, res) => {
   const payload = verifySetupToken(req.body?.setupToken);
   if (!payload) return res.status(401).json({ error: 'Setup expired. Please sign in again.' });
+  const key = `setup:${payload.sub}`;
+  if (tooMany(key) || tooMany(`ip:${req.ip}`)) {
+    return res.status(429).json({ error: 'Too many wrong codes. Please wait 15 minutes.' });
+  }
   const row = platformDb.prepare('SELECT * FROM platform_users WHERE id = ?').get(payload.sub);
   if (!row || !row.enabled || row.totp_enabled || !row.totp_secret) return res.status(400).json({ error: 'Please sign in again.' });
   const step = verifyTotp(row.totp_secret, req.body?.code);
-  if (step == null) return res.status(401).json({ error: 'That code did not match. Check the phone clock and try the newest code.' });
+  if (step == null) {
+    noteFailure(key); noteFailure(`ip:${req.ip}`);
+    return res.status(401).json({ error: 'That code did not match. Check the phone clock and try the newest code.' });
+  }
+  failures.delete(key);
   platformDb.prepare('UPDATE platform_users SET totp_enabled = 1, totp_last_step = ? WHERE id = ?').run(step, row.id);
   audit(`console:${row.username}`, 'console.2fa_enabled');
   finishLogin(res, { ...row, totp_enabled: 1 });
@@ -124,7 +135,8 @@ router.post('/auth/change-password', asyncHandler(async (req, res) => {
   if (pwError) return res.status(400).json({ error: pwError });
   platformDb.prepare('UPDATE platform_users SET password_hash = ? WHERE id = ?').run(await bcrypt.hash(next, 10), req.platformUser.id);
   audit(actorOf(req), 'console.password_changed');
-  res.json({ success: true });
+  // Other open sessions end; this one carries on with a fresh token.
+  res.json({ success: true, token: signPlatformToken(platformDb.prepare('SELECT * FROM platform_users WHERE id = ?').get(req.platformUser.id)) });
 }));
 
 // -----------------------------------------------------------------------------
@@ -348,7 +360,8 @@ router.post('/tenants/:code/users/:id/reset-password', requirePermission('users.
   if (!row) return res.status(404).json({ error: 'User not found.' });
   const charset = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const temp = `Mm${Array.from(crypto.randomBytes(10), b => charset[b % charset.length]).join('')}9!`;
-  tdb.prepare('UPDATE users SET password_hash = ?, must_change_password = 1, enabled = 1 WHERE id = ?').run(await bcrypt.hash(temp, 10), row.id);
+  // A reset does not switch a disabled user back on (that is a separate step, which checks the plan's user limit).
+  tdb.prepare('UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?').run(await bcrypt.hash(temp, 10), row.id);
   audit(actorOf(req), 'tenant.user.reset_password', req.target.code, { userId: row.id, username: row.username });
   res.json({ tempPassword: temp });
 }));
@@ -361,6 +374,10 @@ router.post('/tenants/:code/users/:id/enabled', requirePermission('users.support
   if (!enabled && row.role === 'Main Admin') {
     const others = tdb.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'Main Admin' AND enabled = 1 AND id != ?").get(row.id).n;
     if (others === 0) return res.status(400).json({ error: 'This is the only Main Admin - it cannot be switched off.' });
+  }
+  if (enabled && !row.enabled) {
+    const limitError = userLimitError(req.target.code, tdb);
+    if (limitError) return res.status(403).json({ error: limitError, code: 'PLAN_LIMIT' });
   }
   tdb.prepare('UPDATE users SET enabled = ? WHERE id = ?').run(enabled ? 1 : 0, row.id);
   audit(actorOf(req), enabled ? 'tenant.user.enable' : 'tenant.user.disable', req.target.code, { userId: row.id, username: row.username });
@@ -451,6 +468,10 @@ router.put('/plans/:id', requirePermission('plans.write'), (req, res) => {
   if (!getPlan(req.params.id)) return res.status(404).json({ error: 'Plan not found.' });
   try {
     const fields = cleanPlanBody(req.body || {});
+    if (req.params.id === 'internal' && (fields.limits !== undefined || fields.features !== undefined || fields.active === 0)) {
+      // Alagiri Duplex runs on this plan: limits or switched-off features would stop its WhatsApp or users.
+      throw new PlatformError('The Internal plan always has every feature and no limits. Only its name can be changed.');
+    }
     const cols = Object.keys(fields);
     if (!cols.length) throw new PlatformError('Nothing to change.');
     platformDb.prepare(`UPDATE plans SET ${cols.map(c => `${c} = ?`).join(', ')} WHERE id = ?`).run(...cols.map(c => fields[c]), req.params.id);
@@ -485,7 +506,10 @@ const cleanAnnouncement = (b) => {
     if (Number.isNaN(t)) throw new PlatformError(`${label} is not a valid date/time.`);
     return new Date(t).toISOString();
   };
-  return { message, level, tenantCode, startsAt: toIso(b.startsAt, 'Start'), endsAt: toIso(b.endsAt, 'End') };
+  const startsAt = toIso(b.startsAt, 'Start');
+  const endsAt = toIso(b.endsAt, 'End');
+  if (startsAt && endsAt && endsAt <= startsAt) throw new PlatformError('End must be after the start.');
+  return { message, level, tenantCode, startsAt, endsAt };
 };
 
 router.post('/announcements', requirePermission('announcements.write'), (req, res) => {
@@ -550,14 +574,17 @@ router.put('/console-users/:id', requirePermission('console.users'), asyncHandle
   const losingOwner = row.role === 'owner' && ((b.role && b.role !== 'owner') || b.enabled === false);
   if (losingOwner && owners === 0) return res.status(400).json({ error: 'There must always be at least one active owner.' });
   if (b.role !== undefined && !PLATFORM_ROLES.includes(b.role)) return res.status(400).json({ error: 'Unknown role.' });
+  // Check everything before writing anything, so a refused request changes nothing.
+  if (b.newPassword) {
+    const pwError = validatePassword(String(b.newPassword));
+    if (pwError) return res.status(400).json({ error: pwError });
+  }
   const changes = {};
   if (b.role !== undefined) { platformDb.prepare('UPDATE platform_users SET role = ? WHERE id = ?').run(b.role, row.id); changes.role = b.role; }
   if (b.enabled !== undefined) { platformDb.prepare('UPDATE platform_users SET enabled = ? WHERE id = ?').run(b.enabled ? 1 : 0, row.id); changes.enabled = !!b.enabled; }
   if (b.name !== undefined) { platformDb.prepare('UPDATE platform_users SET name = ? WHERE id = ?').run(String(b.name).trim().slice(0, 80), row.id); changes.name = b.name; }
   if (b.resetTwoFactor) { platformDb.prepare('UPDATE platform_users SET totp_enabled = 0, totp_secret = NULL, totp_last_step = NULL WHERE id = ?').run(row.id); changes.resetTwoFactor = true; }
   if (b.newPassword) {
-    const pwError = validatePassword(String(b.newPassword));
-    if (pwError) return res.status(400).json({ error: pwError });
     platformDb.prepare('UPDATE platform_users SET password_hash = ? WHERE id = ?').run(await bcrypt.hash(String(b.newPassword), 10), row.id);
     changes.passwordReset = true;
   }

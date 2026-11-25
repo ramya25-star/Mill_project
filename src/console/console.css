@@ -144,6 +144,9 @@ table.c-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .c-table td { padding: 9px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
 .c-table td.num, .c-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .c-table tr.clickable { cursor: pointer; }
+/* Wide tables scroll sideways on phones instead of squeezing text into a column. */
+table.c-table-wide { min-width: 720px; }
+.c-span-all { grid-column: 1 / -1; }
 .c-table tr.clickable:hover td { background: var(--surface-2); }
 
 .c-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }

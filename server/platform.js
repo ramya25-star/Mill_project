@@ -272,6 +272,16 @@ export const tenantLimits = (code = currentTenantCode()) => {
 
 export const hasFeature = (feature, code = currentTenantCode()) => tenantLimits(code).features[feature] !== false;
 
+// Error text when one more active user would go past the plan's user limit, else null.
+export const userLimitError = (code = currentTenantCode(), tdb = getTenantDb(code)) => {
+  const { limits } = tenantLimits(code);
+  if (!limits.maxUsers) return null;
+  const active = tdb.prepare('SELECT COUNT(*) AS n FROM users WHERE enabled = 1').get().n;
+  return active >= limits.maxUsers
+    ? `Your Mill Mate plan allows ${limits.maxUsers} active users. Disable a user or contact Mill Mate to upgrade.`
+    : null;
+};
+
 // -----------------------------------------------------------------------------
 // Bootstrap: plans + the default company
 // -----------------------------------------------------------------------------
@@ -341,6 +351,8 @@ export async function createTenant({ code, name, contact = {}, planId = 'standar
   const grace = Math.max(0, Math.min(Number(graceDays) || 0, 60));
 
   const passwordHash = await bcrypt.hash(password, 10);
+  // Check again after the wait: two people may have pressed "Create" with the same code.
+  if (getTenantRow(clean) || tenantDbExists(clean)) throw new PlatformError(`Company code ${clean} is already used.`, 409);
   let tenantDb;
   try {
     tenantDb = getTenantDb(clean, { create: true, companyName: String(name).trim() });
@@ -403,9 +415,12 @@ export function recordPayment(code, { amount, method, reference, paidOn, months,
   const paidDate = paidOn ? String(paidOn) : todayIst();
   if (!isDateOnly(paidDate)) throw new PlatformError('Paid-on date must be YYYY-MM-DD.');
 
-  // New period starts the day after the current one ends (or today if it has lapsed).
+  // New period starts the day after the current paid period ends; paying
+  // during a free trial starts it after the trial, so no trial days are lost;
+  // otherwise (lapsed) it starts today.
   const today = todayIst();
-  const from = t.paidUntil && t.paidUntil >= today ? addDays(t.paidUntil, 1) : today;
+  const runningUntil = [t.paidUntil, t.trialEndsAt].filter(d => d && d >= today).sort().pop();
+  const from = runningUntil ? addDays(runningUntil, 1) : today;
   let to;
   if (periodTo) {
     if (!isDateOnly(periodTo)) throw new PlatformError('Valid-until date must be YYYY-MM-DD.');

@@ -49,7 +49,9 @@ const BUILT_IN_ADDRESS_NAMES = [...BILL_TO_OPTIONS];
 let activeProfile = null;
 let isOriginalCompany = true;
 
-export const getAddressBook = () => (activeProfile?.addresses?.length ? activeProfile.addresses : null);
+// null = the built-in Alagiri addresses (original company only); other
+// companies always get their own list, even while it is still empty.
+export const getAddressBook = () => (activeProfile?.addresses?.length ? activeProfile.addresses : (isOriginalCompany ? null : []));
 
 // The option lists are shared arrays used across the app, so they are
 // updated in place.

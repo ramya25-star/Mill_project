@@ -299,3 +299,72 @@ test('Console overview and audit trail', async () => {
     assert.ok(actions.includes(a), `audit has ${a}`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Bugs found in QA (2026-11-24) - kept as tests so they stay fixed.
+// ---------------------------------------------------------------------------
+test('switching a user back on (or resetting a disabled user) cannot pass the plan user limit', async () => {
+  const plan = await call('/platform/plans', { method: 'POST', token: consoleToken, body: { name: 'Two users', limits: { maxUsers: 2 } } });
+  assert.equal((await call('/platform/tenants/XYZMILLS', { method: 'PUT', token: consoleToken, body: { planId: plan.json.id } })).status, 200);
+  const mk = (username, email) => call('/users', {
+    method: 'POST', token: xyzToken,
+    body: { username, name: 'Store Keeper', email, phone: '9876543210', role: 'Employee', department: 'Logistics', password: 'Store#1234' }
+  });
+  assert.equal((await mk('store1', 'store1@xyz.test')).status, 201);
+  const store1 = (await call('/users', { token: xyzToken })).json.find(u => u.username === 'store1');
+  assert.equal((await call(`/users/${store1.id}`, { method: 'PUT', token: xyzToken, body: { disabled: true } })).status, 200);
+  assert.equal((await mk('store2', 'store2@xyz.test')).status, 201, 'a free slot after switching one off');
+
+  const reEnable = await call(`/users/${store1.id}`, { method: 'PUT', token: xyzToken, body: { disabled: false } });
+  assert.equal(reEnable.status, 403);
+  assert.equal(reEnable.json.code, 'PLAN_LIMIT');
+  assert.equal((await call(`/users/${store1.id}/reset-password`, { method: 'POST', token: xyzToken, body: {} })).status, 403);
+  assert.equal((await call(`/platform/tenants/XYZMILLS/users/${store1.id}/enabled`, { method: 'POST', token: consoleToken, body: { enabled: true } })).status, 403);
+  const consoleReset = await call(`/platform/tenants/XYZMILLS/users/${store1.id}/reset-password`, { method: 'POST', token: consoleToken });
+  assert.equal(consoleReset.status, 200);
+  const active = (await call('/users', { token: xyzToken })).json.filter(u => u.enabled !== false && !u.disabled).length;
+  assert.equal(active, 2, 'Console password reset does not switch the user back on');
+  await call('/platform/tenants/XYZMILLS', { method: 'PUT', token: consoleToken, body: { planId: 'standard' } });
+});
+
+test('paying during a free trial starts the paid period after the trial', async () => {
+  const created = await call('/platform/tenants', {
+    method: 'POST', token: consoleToken,
+    body: { code: 'TRIALCO', name: 'Trial Co', trialDays: 10, admin: { username: 'admin', password: 'TrialAdm#1', name: 'Admin' } }
+  });
+  assert.equal(created.status, 201, JSON.stringify(created.json));
+  const pay = await call('/platform/tenants/TRIALCO/payments', { method: 'POST', token: consoleToken, body: { amount: 100, months: 1 } });
+  assert.equal(pay.status, 201);
+  assert.equal(pay.json.periodFrom, platform.addDays(created.json.trialEndsAt, 1));
+});
+
+test('the Internal plan cannot be limited (the original company runs on it)', async () => {
+  const r = await call('/platform/plans/internal', { method: 'PUT', token: consoleToken, body: { features: { whatsapp: false } } });
+  assert.equal(r.status, 400);
+  assert.equal((await call('/platform/plans/internal', { method: 'PUT', token: consoleToken, body: { name: 'Internal' } })).status, 200);
+  const ann = await call('/platform/announcements', { method: 'POST', token: consoleToken, body: { message: 'x', startsAt: '2026-12-10', endsAt: '2026-12-01' } });
+  assert.equal(ann.status, 400, 'announcement cannot end before it starts');
+});
+
+test('Console: password reset ends open sessions; a refused update changes nothing', async () => {
+  const made = await call('/platform/console-users', { method: 'POST', token: consoleToken, body: { username: 'helper1', role: 'support', password: 'Helper#123' } });
+  assert.equal(made.status, 201);
+  const helperToken = await consoleLogin('helper1', 'Helper#123');
+  assert.equal((await call('/platform/auth/me', { token: helperToken })).status, 200);
+
+  const refused = await call(`/platform/console-users/${made.json.id}`, { method: 'PUT', token: consoleToken, body: { role: 'admin', newPassword: 'x' } });
+  assert.equal(refused.status, 400);
+  assert.equal((await call('/platform/auth/me', { token: helperToken })).json.role, 'support', 'role unchanged after a refused update');
+
+  assert.equal((await call(`/platform/console-users/${made.json.id}`, { method: 'PUT', token: consoleToken, body: { newPassword: 'Helper#456' } })).status, 200);
+  assert.equal((await call('/platform/auth/me', { token: helperToken })).status, 401, 'old session ended');
+});
+
+test('a company without saved addresses never gets the built-in Alagiri addresses on a PO', async () => {
+  const { getCompanyAddress } = await import('../../shared/companyAddresses.js');
+  const { poDataFromOrder } = await import('../../shared/poData.js');
+  assert.deepEqual(getCompanyAddress('XYZ PAPER MILL', 'billTo', []), ['XYZ PAPER MILL']);
+  assert.ok(getCompanyAddress('Alagiri Duplex Factory', 'billTo', null).length > 1, 'original company keeps its built-in addresses');
+  const po = poDataFromOrder({ id: 'R1', billTo: 'XYZ PAPER MILL' }, {}, 'Ravi', []);
+  assert.ok(!JSON.stringify(po).toUpperCase().includes('ALAGIRI'), JSON.stringify(po.billTo));
+});

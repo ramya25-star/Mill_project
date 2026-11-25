@@ -37,13 +37,18 @@ const fmtMoney = (n) => (n == null || n === '' ? '-' : `₹${Number(n).toLocaleS
 const fmtBytes = (n) => (n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round((n || 0) / 1024))} KB`);
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
 
-const Field = ({ label, hint, children }) => (
-  <div className="c-field">
-    <label>{label}</label>
-    {children}
-    {hint && <div className="hint">{hint}</div>}
-  </div>
-);
+// Label tied to its input (screen readers, and tapping the label focuses it).
+const Field = ({ label, hint, children }) => {
+  const id = React.useId();
+  const single = React.isValidElement(children) && ['input', 'select', 'textarea'].includes(children.type);
+  return (
+    <div className="c-field">
+      <label htmlFor={single ? (children.props.id || id) : undefined}>{label}</label>
+      {single && !children.props.id ? React.cloneElement(children, { id }) : children}
+      {hint && <div className="hint">{hint}</div>}
+    </div>
+  );
+};
 
 const Alert = ({ tone = 'bad', children }) => (children ? <div className={`c-alert ${tone}`} role="alert">{children}</div> : null);
 
@@ -423,6 +428,15 @@ function Subscription({ t, plans, writable, reload }) {
   const [paidUntil, setPaidUntil] = useState(t.paidUntil || '');
   const [graceDays, setGraceDays] = useState(t.graceDays);
   const [noBilling, setNoBilling] = useState(t.isInternal);
+  // Follow the saved values when the company reloads (e.g. a payment just
+  // moved "Paid until"); otherwise Save would write the old dates back.
+  useEffect(() => {
+    setPlanId(t.planId || '');
+    setTrialEndsAt(t.trialEndsAt || '');
+    setPaidUntil(t.paidUntil || '');
+    setGraceDays(t.graceDays);
+    setNoBilling(t.isInternal);
+  }, [t.planId, t.trialEndsAt, t.paidUntil, t.graceDays, t.isInternal]);
   const { busy, error, done, run } = useAction();
   const save = (e) => {
     e.preventDefault();
@@ -543,10 +557,26 @@ function Support({ t, me }) {
   const { busy, error, run } = useAction();
   const until = t.supportAccessUntil ? new Date(t.supportAccessUntil) : null;
   const allowed = until && until > new Date();
-  const open = () => run(async () => {
-    const res = await api(`/tenants/${t.code}/support-session`, { method: 'POST' });
-    window.open(res.url, '_blank', 'noopener');
-  });
+  const [link, setLink] = useState('');
+  const open = () => {
+    // Open the tab during the click (browsers block tabs opened after a wait),
+    // then point it at the app once the session is ready.
+    const tab = window.open('about:blank', '_blank');
+    run(async () => {
+      try {
+        const res = await api(`/tenants/${t.code}/support-session`, { method: 'POST' });
+        if (tab && !tab.closed) {
+          tab.opener = null;
+          tab.location.href = res.url;
+        } else {
+          setLink(res.url); // pop-up blocked: show a link to click instead
+        }
+      } catch (err) {
+        if (tab && !tab.closed) tab.close();
+        throw err;
+      }
+    });
+  };
   return (
     <div className="c-card c-form">
       <h2>Support access</h2>
@@ -559,6 +589,7 @@ function Support({ t, me }) {
       {can(me, 'support.login') && (
         <div><button className="c-btn primary" disabled={busy || !allowed} onClick={open}>Open their app as support (30 min)</button></div>
       )}
+      {link && <Alert tone="info">The browser blocked the new tab. <a href={link} target="_blank" rel="noopener noreferrer">Open the support session</a> (works for 30 minutes).</Alert>}
       <div className="c-muted c-small">Every support visit is recorded in the audit trail.</div>
     </div>
   );
@@ -580,7 +611,7 @@ function Users({ t, canAct, reload }) {
     await reload();
   });
   return (
-    <div className="c-card">
+    <div className="c-card c-span-all">
       <h2>Users <small>{t.users.length}</small></h2>
       <Alert>{error}</Alert>
       {temp && (
@@ -834,7 +865,7 @@ function AuditTable({ rows }) {
   if (!rows?.length) return <div className="c-muted">Nothing recorded yet.</div>;
   return (
     <div className="c-table-wrap">
-      <table className="c-table">
+      <table className="c-table c-table-wide">
         <thead><tr><th>When</th><th>Who</th><th>What</th><th>Company</th><th>Details</th></tr></thead>
         <tbody>
           {rows.map(r => (
@@ -950,7 +981,11 @@ function Account({ me }) {
   const { busy, error, done, run } = useAction();
   const submit = (e) => {
     e.preventDefault();
-    run(async () => { await api('/auth/change-password', { method: 'POST', body: { currentPassword: current, newPassword: next } }); setCurrent(''); setNext(''); }, 'Password changed.');
+    run(async () => {
+      const res = await api('/auth/change-password', { method: 'POST', body: { currentPassword: current, newPassword: next } });
+      if (res?.token) setToken(res.token);
+      setCurrent(''); setNext('');
+    }, 'Password changed. Other signed-in devices were signed out.');
   };
   return (
     <>

@@ -50,7 +50,9 @@ export const shipToFromBook = (book, billTo) => {
 
 export const getCompanyAddress = (companyName, type = 'billTo', book = null) => {
   if (!companyName) return [];
-  if (Array.isArray(book) && book.length) return addressFromBook(book, companyName);
+  // A list (even an empty one) means "this company's own addresses only":
+  // other companies must never get the built-in Alagiri addresses below.
+  if (Array.isArray(book)) return book.length ? addressFromBook(book, companyName) : [companyName];
   
   // Exact match
   if (COMPANY_ADDRESSES[companyName]) {

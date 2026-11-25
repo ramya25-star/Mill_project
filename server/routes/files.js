@@ -27,7 +27,9 @@ export function generatePoPdfBuffer(order) {
   }
   const profile = getCompanyProfile();
   const signatory = profile.poSignatory || (isDefaultTenant() ? PO_SIGNATORY : '');
-  const doc = buildPoPdf(poDataFromOrder(order, supplier, signatory, profile.addresses), { jsPDF });
+  // null = built-in Alagiri addresses (original company only); [] = none saved yet.
+  const addressBook = profile.addresses || (isDefaultTenant() ? null : []);
+  const doc = buildPoPdf(poDataFromOrder(order, supplier, signatory, addressBook), { jsPDF });
   return Buffer.from(doc.output('arraybuffer'));
 }
 

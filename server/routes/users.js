@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'node:crypto';
 import { db } from '../db.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { serializeUser } from '../serializers.js';
 import { validateUserFields, asText, validatePassword, USER_ROLES, NAME_REGEX, EMAIL_REGEX, PHONE_REGEX, compactPhone, normalizePhone } from '../validation.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
-import { tenantLimits } from '../platform.js';
+import { userLimitError } from '../platform.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -49,11 +50,10 @@ router.post('/', requireRole('Main Admin'), asyncHandler(async (req, res) => {
     if (pwError) return res.status(400).json({ error: pwError });
   }
 
-  const { limits } = tenantLimits();
-  if (limits.maxUsers) {
-    const active = db.prepare('SELECT COUNT(*) AS n FROM users WHERE enabled = 1').get().n;
-    if (active >= limits.maxUsers) {
-      return res.status(403).json({ error: `Your Mill Mate plan allows ${limits.maxUsers} active users. Disable a user or contact Mill Mate to upgrade.`, code: 'PLAN_LIMIT' });
+  {
+    const limitError = userLimitError();
+    if (limitError) {
+      return res.status(403).json({ error: limitError, code: 'PLAN_LIMIT' });
     }
   }
 
@@ -63,7 +63,9 @@ router.post('/', requireRole('Main Admin'), asyncHandler(async (req, res) => {
   const existingEmail = db.prepare("SELECT id FROM users WHERE json_extract(profile, '$.email') = ? COLLATE NOCASE").get(email);
   if (existingEmail) return res.status(409).json({ error: 'Email address is already in use by another user.' });
 
-  const tempPassword = asText(body.password) || `Alagiri${username}`;
+  // Random when the admin leaves it empty (it is shown to the admin once); the
+  // old "Alagiri<username>" default could be guessed by anyone.
+  const tempPassword = asText(body.password) || `Mm${crypto.randomBytes(6).toString('base64url')}9!`;
   const passwordHash = await bcrypt.hash(tempPassword, 10);
   const id = `usr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -183,6 +185,10 @@ router.put('/:id', asyncHandler(async (req, res) => {
 
   const nextRole = (isAdmin && body.role !== undefined) ? body.role : row.role;
   const nextEnabled = (isAdmin && body.disabled !== undefined) ? (body.disabled ? 0 : 1) : row.enabled;
+  if (nextEnabled && !row.enabled) {
+    const limitError = userLimitError();
+    if (limitError) return res.status(403).json({ error: limitError, code: 'PLAN_LIMIT' });
+  }
 
   let nextPasswordHash = row.password_hash;
   let nextMustChange = row.must_change_password;
@@ -218,6 +224,11 @@ router.post('/:id/reset-password', requireRole('Main Admin'), asyncHandler(async
     tempPassword = Array.from({ length: 12 }, () => charset.charAt(Math.floor(Math.random() * charset.length))).join('');
   }
 
+  // A reset also switches a disabled user back on - unless that would pass the plan's user limit.
+  if (!row.enabled) {
+    const limitError = userLimitError();
+    if (limitError) return res.status(403).json({ error: limitError, code: 'PLAN_LIMIT' });
+  }
   const passwordHash = await bcrypt.hash(tempPassword, 10);
   db.prepare('UPDATE users SET password_hash = ?, must_change_password = 1, enabled = 1 WHERE id = ?').run(passwordHash, row.id);
 

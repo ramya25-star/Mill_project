@@ -33,8 +33,14 @@ const PERMISSIONS = {
 export const can = (role, permission) => (PERMISSIONS[permission] || []).includes(role);
 export const permissionsFor = (role) => Object.keys(PERMISSIONS).filter(p => can(role, p));
 
+// Fingerprint of the password and authenticator: changing either one (or a
+// reset by the owner / server script) ends every open Console session of
+// that user.
+const credentialVersion = (user) => crypto.createHash('sha256')
+  .update(`${user.password_hash || ''}|${user.totp_secret || ''}`).digest('base64url').slice(0, 16);
+
 export const signPlatformToken = (user) => jwt.sign(
-  { sub: user.id, username: user.username, role: user.role },
+  { sub: user.id, username: user.username, role: user.role, cv: credentialVersion(user) },
   platformSecret(),
   { expiresIn: '12h', audience: PLATFORM_AUDIENCE }
 );
@@ -63,6 +69,9 @@ export const requirePlatformAuth = (req, res, next) => {
   const row = platformDb.prepare('SELECT * FROM platform_users WHERE id = ?').get(payload.sub);
   if (!row || !row.enabled || !row.totp_enabled) {
     return res.status(401).json({ error: 'Console account not found or disabled.' });
+  }
+  if (payload.cv !== credentialVersion(row)) {
+    return res.status(401).json({ error: 'Your password or authenticator was changed. Please sign in again.' });
   }
   req.platformUser = row;
   next();

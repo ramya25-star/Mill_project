@@ -654,7 +654,9 @@ export function CreateRequestView({ state, navigateTo, goBack, addNotification, 
         }
         const initialBillTo = clonedReq.billTo && BILL_TO_OPTIONS.includes(clonedReq.billTo)
           ? clonedReq.billTo
-          : (clonedReq.billTo && clonedReq.billTo.includes("DUPLEX") ? "Alagiri Duplex Factory" : "Alagiri Paper Mill Factory");
+          : (BILL_TO_OPTIONS.includes("Alagiri Paper Mill Factory")
+            ? (clonedReq.billTo && clonedReq.billTo.includes("DUPLEX") ? "Alagiri Duplex Factory" : "Alagiri Paper Mill Factory")
+            : (BILL_TO_OPTIONS[0] || ""));
         setBillTo(initialBillTo);
         const validShipOptions = getShipToOptions(initialBillTo);
         const initialShipTo = clonedReq.shipTo && validShipOptions.includes(clonedReq.shipTo)
@@ -5686,7 +5688,7 @@ export function AuditLogsView({ state, navigateTo, openModal, closeModal, setMod
 
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `Alagiri_Audit_Logs_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute("download", `MillMate_Audit_Logs_${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -6284,7 +6286,7 @@ export function LoginView({ onLogin }) {
             
             <div className="form-group">
               <label>Company Code</label>
-              <input type="text" className="form-control" placeholder="e.g. ALAGIRI" value={companyCode} onChange={e => setCompanyCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} maxLength={20} autoCapitalize="characters" autoCorrect="off" spellCheck={false} autoComplete="organization" style={{ cursor: 'text', textTransform: 'uppercase', letterSpacing: '1px' }} />
+              <input type="text" className="form-control" placeholder="Leave empty if not given" value={companyCode} onChange={e => setCompanyCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} maxLength={20} autoCapitalize="characters" autoCorrect="off" spellCheck={false} autoComplete="organization" style={{ cursor: 'text', textTransform: 'uppercase', letterSpacing: '1px' }} />
               <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Given by your administrator.</div>
             </div>
 
@@ -6371,7 +6373,7 @@ export function ForceChangePasswordView({ state, user, onPasswordChanged }) {
     try {
       const updatedUser = await apiService.forceChangePassword(user.id, newPass);
       if (state && state.showToast) {
-        state.showToast("Password Updated", "Password changed successfully! Welcome to Alagiri.", "success");
+        state.showToast("Password Updated", "Password changed successfully! Welcome to Mill Mate.", "success");
       }
       onPasswordChanged(updatedUser);
     } catch (err) {

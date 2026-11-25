@@ -9,6 +9,7 @@ import '../loadEnv.js';
 import bcrypt from 'bcryptjs';
 import { platformDb, newId, audit, PLATFORM_DB_PATH } from '../platform.js';
 import { PLATFORM_ROLES } from '../middleware/platformAuth.js';
+import { validatePassword } from '../validation.js';
 
 const [username, role, name = ''] = process.argv.slice(2);
 const password = process.env.CONSOLE_PASSWORD
@@ -18,9 +19,12 @@ if (!username || !PLATFORM_ROLES.includes(role) || !/^[A-Za-z0-9._-]{3,40}$/.tes
   console.error(`Usage: CONSOLE_PASSWORD='...' node scripts/create-console-user.js <username> <${PLATFORM_ROLES.join('|')}> ["Full name"]`);
   process.exit(1);
 }
-if (password.length < 8) {
-  console.error('CONSOLE_PASSWORD must be at least 8 characters.');
-  process.exit(1);
+{
+  const pwError = validatePassword(password);
+  if (pwError) {
+    console.error(`CONSOLE_PASSWORD: ${pwError}`);
+    process.exit(1);
+  }
 }
 
 const hash = bcrypt.hashSync(password, 10);
