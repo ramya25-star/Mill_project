@@ -757,7 +757,8 @@ export default function App() {
         currentUser,
         setCurrentUser,
         showToast,
-        logout
+        logout,
+        supportSession
       },
       // { replace: true } swaps the current page instead of adding one, for
       // automatic redirects: otherwise Back returns to the page that redirects,

@@ -387,3 +387,33 @@ test('an edited dispatch date stays after the next save of the order', async () 
   const noDate = await call(`/requests/${id}`, { method: 'PUT', token, body: { status: 'Booked' } });
   assert.equal(noDate.json.expectedDispatchDate, '2026-12-10');
 });
+
+test('a user can delete their own account; the last Main Admin cannot', async () => {
+  const admin = (await call('/auth/login', { method: 'POST', body: { username: 'admin', password: 'Password123!' } })).json.token;
+  const add = await call('/users', {
+    method: 'POST', token: admin,
+    body: { username: 'leaver1', name: 'Leaving Employee', email: 'leaver@alagiri.test', phone: '9876500099', role: 'Employee', department: 'Logistics', password: 'Leaver#1234' }
+  });
+  assert.equal(add.status, 201, JSON.stringify(add.json));
+  const token = (await call('/auth/login', { method: 'POST', body: { username: 'leaver1', password: 'Leaver#1234' } })).json.token;
+
+  const wrong = await call('/auth/delete-account', { method: 'POST', token, body: { password: 'nope' } });
+  assert.equal(wrong.status, 400);
+  const done = await call('/auth/delete-account', { method: 'POST', token, body: { password: 'Leaver#1234' } });
+  assert.equal(done.status, 204);
+  assert.equal((await call('/auth/me', { token })).status, 401, 'the old session stops working');
+  assert.equal((await call('/auth/login', { method: 'POST', body: { username: 'leaver1', password: 'Leaver#1234' } })).status, 401);
+  assert.ok(!(await call('/users', { token: admin })).json.some(u => u.username === 'leaver1'), 'profile is gone');
+
+  // A company's only Main Admin is refused, so the company is never left without one.
+  const created = await call('/platform/tenants', {
+    method: 'POST', token: consoleToken,
+    body: { code: 'delco', name: 'Delete Co', trialDays: 14, admin: { username: 'boss', password: 'DelBoss#12', name: 'Boss' } }
+  });
+  assert.equal(created.status, 201, JSON.stringify(created.json));
+  const boss = (await call('/auth/login', { method: 'POST', body: { companyCode: 'DELCO', username: 'boss', password: 'DelBoss#12' } })).json.token;
+  const refused = await call('/auth/delete-account', { method: 'POST', token: boss, body: { password: 'DelBoss#12' } });
+  assert.equal(refused.status, 400);
+  assert.equal(refused.json.code, 'LAST_MAIN_ADMIN');
+  assert.equal((await call('/auth/me', { token: boss })).status, 200);
+});

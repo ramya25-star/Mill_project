@@ -231,7 +231,7 @@ export function tenantAccess(tenant, now = new Date()) {
     const daysLeft = daysBetween(today, t.paidUntil);
     return {
       state: 'active', canLogin: true, canWrite: true, automation: true, daysLeft, endsOn: t.paidUntil,
-      message: daysLeft <= 7 ? `Your Mill Mate subscription renews on ${t.paidUntil}. Please arrange the payment to avoid interruption.` : ''
+      message: daysLeft <= 7 ? `Your Mill Mate subscription is active until ${t.paidUntil}. Your company administrator can contact Mill Mate about it.` : ''
     };
   }
   if (t.trialEndsAt && today <= t.trialEndsAt) {
@@ -247,13 +247,13 @@ export function tenantAccess(tenant, now = new Date()) {
     if (today <= lockOn) {
       return {
         state: 'due', canLogin: true, canWrite: true, automation: true, endsOn: lockOn,
-        message: `Your Mill Mate subscription ended on ${endedOn}. Please renew - the app becomes view-only after ${lockOn}.`
+        message: `Your Mill Mate subscription ended on ${endedOn}. The app becomes view-only after ${lockOn}; your company administrator can contact Mill Mate.`
       };
     }
   }
   return {
     state: 'expired', canLogin: true, canWrite: false, automation: false,
-    message: 'Your Mill Mate subscription has ended, so the app is view-only. Please contact Mill Mate to renew.'
+    message: 'Your Mill Mate subscription has ended, so the app is view-only. Your company administrator can contact Mill Mate.'
   };
 }
 

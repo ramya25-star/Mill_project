@@ -148,4 +148,28 @@ router.post('/force-change-password', requireAuth, asyncHandler(async (req, res)
   res.json(serializeUser(updated));
 }));
 
+// Self-service account deletion (App Store guideline 5.1.1(v)). Removes the
+// user's login and profile (name, phone, photo) the same way a Main Admin's
+// "delete user" does. Orders and logs the user created stay, because they are
+// the company's business records. A company is never left without a Main Admin.
+router.post('/delete-account', requireAuth, asyncHandler(async (req, res) => {
+  if (req.user.isSupport) return res.status(403).json({ error: 'Support sessions cannot delete accounts.' });
+  const password = asText(req.body?.password);
+  if (!password) return res.status(400).json({ error: 'Please enter your password to confirm.' });
+  const isMatch = await bcrypt.compare(password, req.user.password_hash);
+  if (!isMatch) return res.status(400).json({ error: 'Password is incorrect.' });
+
+  if (req.user.role === 'Main Admin') {
+    const others = db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'Main Admin' AND enabled = 1 AND id <> ?").get(req.user.id).n;
+    if (!others) {
+      return res.status(400).json({
+        error: 'You are the only Main Admin of this company. Make another user Main Admin first, or contact Mill Mate to close the company account.',
+        code: 'LAST_MAIN_ADMIN'
+      });
+    }
+  }
+  db.prepare('DELETE FROM users WHERE id = ?').run(req.user.id);
+  res.status(204).end();
+}));
+
 export default router;

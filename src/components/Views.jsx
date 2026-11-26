@@ -5092,6 +5092,57 @@ export function ChangePasswordForm({ user, apiService, closeModal }) {
 }
 
 // ----------------------------------------------------
+// Delete my account (App Store guideline 5.1.1(v))
+// ----------------------------------------------------
+export function DeleteAccountForm({ onDeleted, closeModal }) {
+  const [password, setPassword] = useState("");
+  const [confirmText, setConfirmText] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const ready = password && confirmText.trim().toUpperCase() === "DELETE";
+
+  const handleDelete = async (e) => {
+    e.preventDefault();
+    if (!ready || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await apiService.deleteMyAccount(password);
+      onDeleted();
+    } catch (err) {
+      setError(err.message || "Your account could not be deleted. Please try again.");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleDelete} style={{ textAlign: 'left' }}>
+      <p style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: 1.5, marginTop: 0 }}>
+        This permanently deletes your Mill Mate login and your profile (name, phone number and photo). You will be signed out and cannot sign in again.
+      </p>
+      <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+        Orders, purchase orders and activity you recorded stay with your company, because they are its business records.
+      </p>
+      <div className="form-group">
+        <label htmlFor="delete-account-password">Your password</label>
+        <input id="delete-account-password" type="password" className="form-control" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" />
+      </div>
+      <div className="form-group">
+        <label htmlFor="delete-account-confirm">Type DELETE to confirm</label>
+        <input id="delete-account-confirm" className="form-control" value={confirmText} onChange={e => setConfirmText(e.target.value)} autoCapitalize="characters" autoComplete="off" />
+      </div>
+      {error && <div role="alert" style={{ color: 'var(--status-red)', fontSize: '13px', fontWeight: 600, marginBottom: '12px' }}>{error}</div>}
+      <div style={{ display: 'flex', gap: '10px' }}>
+        <button type="button" className="btn-dark" onClick={closeModal} style={{ flex: 1, cursor: 'pointer', backgroundColor: '#4B5563', marginBottom: 0 }} disabled={busy}>Cancel</button>
+        <button type="submit" className="btn-dark" disabled={!ready || busy} style={{ flex: 1, cursor: ready && !busy ? 'pointer' : 'not-allowed', backgroundColor: 'var(--status-red)', marginBottom: 0, opacity: ready && !busy ? 1 : 0.55 }}>
+          {busy ? 'Deleting...' : 'Delete account'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// ----------------------------------------------------
 // 7. SETTINGS MAIN VIEW COMPONENT
 // ----------------------------------------------------
 export function SettingsView({ state, navigateTo, openModal, closeModal, setModalContent }) {
@@ -5106,6 +5157,22 @@ export function SettingsView({ state, navigateTo, openModal, closeModal, setModa
     setModalContent(
       <ChangePasswordForm key="change-password-form" user={user} apiService={apiService} closeModal={closeModal} />,
       "Change Password"
+    );
+    openModal();
+  };
+
+  const openDeleteAccountModal = () => {
+    setModalContent(
+      <DeleteAccountForm
+        key="delete-account-form"
+        closeModal={closeModal}
+        onDeleted={() => {
+          closeModal();
+          state.logout();
+          state.showToast("Account Deleted", "Your Mill Mate account has been deleted.", "success");
+        }}
+      />,
+      "Delete My Account"
     );
     openModal();
   };
@@ -5288,6 +5355,16 @@ export function SettingsView({ state, navigateTo, openModal, closeModal, setModa
             </div>
             <Icons.ChevronRight />
           </div>
+
+          {!state.supportSession && (
+            <div className="settings-item" onClick={openDeleteAccountModal} style={{ cursor: 'pointer' }}>
+              <div className="settings-item-left">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" style={{ color: 'var(--status-red)' }}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>
+                <span className="settings-title">Delete My Account</span>
+              </div>
+              <Icons.ChevronRight />
+            </div>
+          )}
 
           <div className="settings-item" style={{ color: 'var(--status-red)', cursor: 'pointer' }} onClick={state.logout}>
             <div className="settings-item-left">
@@ -8212,7 +8289,7 @@ export function CompanySettingsView({ state, navigateTo, tenantInfo, refreshTena
               <div>Status: <strong>{STATE_LABELS[access?.state] || access?.state}</strong>{access?.endsOn ? <span style={muted}> - until {access.endsOn}</span> : null}</div>
               {tenantInfo.plan && <div>Plan: <strong>{tenantInfo.plan.name}</strong></div>}
               {access?.message && <div style={muted}>{access.message}</div>}
-              <div style={muted}>For renewals or plan changes, contact Mill Mate.</div>
+              <div style={muted}>For questions about your plan, contact Mill Mate.</div>
             </div>
           )}
         </div>

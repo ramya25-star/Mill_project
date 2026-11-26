@@ -1,0 +1,58 @@
+# Codemagic: builds the iPhone app in the cloud and uploads it to TestFlight.
+# Started by hand from the Codemagic website (Start new build -> ios-testflight).
+#
+# One-time setup on codemagic.io (see docs/IOS_CODEMAGIC.md):
+#   - Teams > Integrations > Developer Portal: add the App Store Connect API key
+#     and name it exactly "MillMate ASC".
+#   - The app record exists in App Store Connect with bundle ID tech.apranex.millmate.
+#
+# Build numbers: <Android versionCode>.<Codemagic build number>, e.g. 5.12.
+# The over-the-air updater (src/services/liveUpdate.js) only sends a bundle to
+# installs whose build is >= the bundle's minNativeBuild (the Android
+# versionCode at deploy time), so iPhones follow the same rule as Android.
+workflows:
+  ios-testflight:
+    name: iOS -> TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: MillMate ASC
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: tech.apranex.millmate
+      node: 22
+      xcode: latest
+      vars:
+        XCODE_PROJECT: ios/App/App.xcodeproj
+        XCODE_SCHEME: App
+    scripts:
+      - name: Install packages
+        script: npm ci
+      - name: Build the web app
+        script: |
+          # Same version stamp style as deploy.ps1, so the app knows which bundle it carries.
+          export APP_BUILD="$(date -u +%Y%m%d-%H%M%S)"
+          npm run build
+      - name: Copy the web app and plugins into the iOS project
+        script: npx cap sync ios
+      - name: Set version and build number
+        script: |
+          VERSION_CODE=$(grep -oE 'versionCode [0-9]+' android/app/build.gradle | awk '{print $2}')
+          VERSION_NAME=$(grep -oE 'versionName "[^"]+"' android/app/build.gradle | cut -d'"' -f2)
+          IOS_BUILD="${VERSION_CODE}.${BUILD_NUMBER}"
+          echo "Version $VERSION_NAME, build $IOS_BUILD"
+          sed -i '' -E "s/MARKETING_VERSION = [^;]+;/MARKETING_VERSION = ${VERSION_NAME};/; s/CURRENT_PROJECT_VERSION = [^;]+;/CURRENT_PROJECT_VERSION = ${IOS_BUILD};/" "$XCODE_PROJECT/project.pbxproj"
+      - name: Use the App Store signing profile
+        script: xcode-project use-profiles
+      - name: Build the IPA
+        script: xcode-project build-ipa --project "$XCODE_PROJECT" --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        # Internal testers (people added in App Store Connect) get each build
+        # without review. Turn this on later for external testers.
+        submit_to_testflight: false

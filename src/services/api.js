@@ -332,6 +332,10 @@ export const apiService = {
     return apiFetch('/auth/change-password', { method: 'POST', body: { currentPassword, newPassword } });
   },
 
+  async deleteMyAccount(password) {
+    return apiFetch('/auth/delete-account', { method: 'POST', body: { password } });
+  },
+
   async forceChangePassword(userId, newPassword) {
     return apiFetch('/auth/force-change-password', { method: 'POST', body: { newPassword } });
   },
